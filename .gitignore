@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+
+# Node.js
+generator/node_modules/
+
+# IDE и локальные инструменты
+.idea/
+.claude/
+
+# Пользовательские данные приложения
+drafts/*
+!drafts/.gitkeep
+
+images/*
+!images/.gitkeep
+
+reports/*
+!reports/.gitkeep

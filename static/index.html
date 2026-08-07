@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report Builder</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- боковая панель со списком черновиков -->
+<div class="backdrop" id="backdrop"></div>
+<aside class="sidebar" id="sidebar">
+  <h2>Отчёты <span class="count" id="draftCount"></span></h2>
+  <div class="draft-list" id="draftList"></div>
+  <button class="newbtn" id="newDraftBtn">+ Новый отчёт</button>
+</aside>
+
+<header>
+  <div class="head-left">
+    <button class="burger" id="burger" title="Отчёты">☰</button>
+    <span class="draft-name" id="draftName" title="Кликните, чтобы переименовать">—</span>
+    <span class="autosave" id="autosave"></span>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="cases">Тест-кейсы <span class="count" id="cCount">0</span></div>
+    <div class="tab" data-tab="bugs">Баг-репорты <span class="count" id="bCount">0</span></div>
+  </div>
+
+  <div class="meta">
+    <label class="meta-field">
+      <span>Проект</span>
+      <select id="project" style="width:120px" onchange="clearFieldError(this)">
+        <option value="" disabled selected>—</option>
+        <option value="a7.ru">a7.ru</option>
+        <option value="finmart">finmart</option>
+      </select>
+    </label>
+    <label class="meta-field">
+      <span>Дата</span>
+      <input id="date" style="width:110px">
+    </label>
+    <label class="meta-field">
+      <span>Таск-трекер</span>
+      <input id="jira" style="width:220px">
+    </label>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="casesPane"></div>
+  <div id="bugsPane" style="display:none"></div>
+</div>
+
+<div class="footbar">
+  <button class="btn big" id="dlDocx">Скачать DOCX</button>
+  <button class="btn big" id="dlPdf">Скачать PDF</button>
+  <span class="status" id="statusMsg"></span>
+</div>
+
+<!-- всплывающие уведомления -->
+<div class="toasts" id="toasts"></div>
+
+<!-- выбор файлов для загрузки картинок -->
+<input type="file" id="fileInput" accept="image/png,image/jpeg" hidden multiple>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

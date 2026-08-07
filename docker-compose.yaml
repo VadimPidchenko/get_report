@@ -1,0 +1,10 @@
+services:
+  app:
+    image: report-builder
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./reports:/report-builder/reports
+      - ./drafts:/report-builder/drafts
+      - ./images:/report-builder/images

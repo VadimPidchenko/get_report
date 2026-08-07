@@ -1,0 +1,11 @@
+{
+  "name": "report-generator",
+  "version": "1.0.0",
+  "description": "Сборка отчёта о тестировании в docx",
+  "private": true,
+  "main": "generate_report.js",
+  "dependencies": {
+    "docx": "^9.0.0",
+    "image-size": "^2.0.0"
+  }
+}

@@ -1,0 +1,321 @@
+/* Оформление интерфейса сборки отчётов.
+   Переменные вынесены наверх — правки цветов и отступов делаются здесь. */
+
+:root{
+    --bg:#f7f8fa; --panel:#ffffff; --ink:#1c2431; --muted:#6b7683;
+    --line:#e3e7ec; --accent:#2f5fd0; --accent-soft:#eaf0fc;
+    --ok:#2e7d32; --fail:#c62828; --warn:#ef6c00;
+    --radius:10px; --sidebar:340px;
+    --field-indent:26px;
+    --list-gap:8px;
+    --list-del:26px;
+    --field-tail:calc(var(--list-gap) + var(--list-del));
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    font-size:14px; line-height:1.5;
+  }
+
+  /* ─── sidebar черновиков ─── */
+  .sidebar{
+    position:fixed; top:0; left:0; bottom:0; width:var(--sidebar); background:var(--bg);
+    border-right:1px solid var(--line); transform:translateX(calc(-1 * var(--sidebar)));
+    transition:transform .22s ease; z-index:40; display:flex; flex-direction:column;
+  }
+  .sidebar.open{transform:translateX(0)}
+  .sidebar h2{font-size:14px; margin:0; padding:16px 16px 10px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px}
+  /* счётчик тише заголовка за счёт размера, а не бледности: тонкие цифры не читаются */
+  .sidebar h2 .count{font-size:13px; font-weight:700; margin-left:4px}
+  .draft-list{flex:1; overflow:auto; padding:0 10px 4px; scrollbar-width:thin; scrollbar-color:#cfd8e3 transparent}
+  /* заголовок дня: липнет к верху списка, чтобы при прокрутке было видно,
+     к какой дате относятся карточки на экране.
+     Отступ сверху заметно больше, чем между карточками, — по близости группа
+     читается как одно целое ещё до того, как прочитан заголовок */
+  .draft-day{
+    position:sticky; top:0; z-index:1; background:var(--bg);
+    font-size:12.5px; font-weight:600; color:var(--muted); letter-spacing:.03em;
+    padding:18px 4px 8px;
+  }
+  .draft-day:first-child{padding-top:2px}
+  .draft-day .n{font-weight:700}
+  /* карточки одного дня склеены в общий блок: одна рамка вместо частокола
+     из отдельных, и группа читается целиком, а не как россыпь похожих плашек */
+  .draft-group{
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    overflow:hidden;  /* скругления обрезают углы крайних карточек */
+  }
+  /* Фон подсветки кнопок — переменные карточки, своя пара на каждое её состояние.
+     Кнопка не бывает под курсором отдельно от карточки, поэтому подсветка всегда
+     ложится либо на серый ховер, либо на синюю активную: с фиксированным цветом
+     она бы на них тонула. Значения ниже — запас на случай подсветки без ховера */
+  .draft-item{
+    background:var(--panel); padding:11px 13px; cursor:pointer;
+    transition:background .15s;
+    --act-hover:var(--accent-soft); --del-hover:#fdecea;
+  }
+  /* соседей внутри блока разделяет волосяная линия, а не воздух */
+  .draft-item + .draft-item{border-top:1px solid var(--line)}
+  .draft-item:hover{
+    background:#f4f7fb;
+    --act-hover:#dde8fa; --del-hover:#fbe3e0;
+  }
+  /* активная идёт после ховера: у карточки под курсором остаётся её синий фон.
+     Цвет подсветки отличается от строки выше ровно настолько, чтобы отрыв от
+     фона совпал: отклик кнопки одинаков и на белой карточке, и на синей */
+  .draft-item.active{
+    background:var(--accent-soft);
+    --act-hover:#d3e1fb; --del-hover:#f7d8d3;
+  }
+  /* название и метка в одной строке: метка держит ширину, название её отдаёт */
+  .draft-item .head{display:flex; align-items:baseline; gap:8px}
+  .draft-item .t{flex:1; min-width:0; font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .draft-item .m{font-size:11px; color:var(--muted); margin-top:4px; display:flex; gap:8px; align-items:center}
+  /* рамка карточки уже отделяет её от соседей — большой отступ здесь не нужен */
+  .draft-item .acts{display:flex; gap:4px; margin-top:9px}
+  /* первая кнопка подтянута влево на свой padding — текст вровень с названием */
+  .draft-item .acts button:first-child{margin-left:-6px}
+
+  /* метка состояния: заметная, но не спорит с названием.
+     Без привязки к карточке — та же метка стоит в плашке восстановления */
+  .badge{
+    flex-shrink:0; font-size:11px; font-weight:700; letter-spacing:.03em;
+    text-transform:uppercase; opacity:.6;
+  }
+  .badge.draft{color:var(--muted)}
+  .badge.a7{color:var(--warn)}
+  .badge.finmart{color:var(--fail)}
+  .badge.other{color:var(--accent)}
+  /* «переименовать» окрашена сразу — иначе о кликабельности строки не догадаться.
+     «удалить» остаётся серой: краснеть постоянно опасному действию незачем */
+  .draft-item .acts button{
+    border:none; background:none; color:var(--accent); cursor:pointer;
+    font-size:11px; font-weight:500; padding:3px 6px; border-radius:5px;
+  }
+  .draft-item .acts button:hover{background:var(--act-hover)}
+  .draft-item .acts button.del{color:var(--muted); font-weight:400}
+  .draft-item .acts button.del:hover{color:var(--fail); background:var(--del-hover)}
+  .sidebar .newbtn{margin:10px; padding:10px; border:1px solid var(--line); background:#fff; color:var(--accent); border-radius:8px; cursor:pointer; font-weight:500}
+  .sidebar .newbtn:hover{border-color:var(--accent)}
+  .sidebar-empty{color:var(--muted); font-size:13px; padding:16px; text-align:center}
+
+  .backdrop{position:fixed; inset:0; background:rgba(20,28,40,.25); z-index:35; display:none}
+  .backdrop.show{display:block}
+
+  /* ─── header ─── */
+  header{
+    background:var(--panel); border-bottom:1px solid var(--line);
+    padding:12px 20px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    position:sticky; top:0; z-index:10;
+  }
+  .burger{border:1px solid var(--line); background:#fff; border-radius:8px; width:38px; height:34px; cursor:pointer; font-size:16px; color:var(--ink)}
+  .burger:hover{border-color:var(--accent); color:var(--accent)}
+
+  .head-left{display:flex; align-items:center; gap:10px; width:420px; flex-shrink:0}
+
+  .draft-name{font-size:15px; font-weight:600; color:var(--ink); border:1px solid transparent; padding:4px 8px; border-radius:6px; cursor:text; max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .draft-name:hover{border-color:var(--line); background:var(--bg)}
+
+  header .meta{display:flex; gap:10px; align-items:flex-end; margin-left:auto; flex-wrap:wrap}
+  .meta-field{display:flex; flex-direction:column; gap:3px}
+  .meta-field > span{font-size:11px; color:var(--muted); padding-left:2px}
+  .meta input, .meta select{border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:13px; background:#fff; color:var(--ink)}
+  .meta input:focus, .meta select:focus{outline:none; border-color:var(--accent)}
+  /* подсветка незаполненного обязательного поля шапки */
+  .meta select.invalid{border-color:var(--fail); background:#fdecea}
+
+  .autosave{font-size:12px; color:var(--muted); min-width:90px; text-align:left; opacity:0; transition:opacity .25s}
+
+  .wrap{max-width:1000px; margin:0 auto; padding:20px 24px 90px}
+  .tabs{display:flex; gap:4px}
+  .tab{padding:6px 12px; border:1px solid var(--line); background:#fff; cursor:pointer; border-radius:8px; font-weight:500; font-size:13px; color:var(--muted)}
+  .tab.active{background:var(--accent); color:#fff; border-color:var(--accent)}
+  .tab .count{opacity:.7; font-size:12px; margin-left:5px}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 18px; margin-bottom:14px}
+  .card-head{display:flex; align-items:center; gap:10px; margin-bottom:12px}
+  .card-head .idx{width:24px; height:24px; border-radius:6px; background:var(--accent-soft); color:var(--accent); font-weight:600; font-size:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0}
+  .card-head input.title{flex:1; border:none; border-bottom:1px solid transparent; font-size:15px; font-weight:600; padding:4px 2px; background:transparent; color:var(--ink)}
+  .card-head input.title:focus{outline:none; border-bottom-color:var(--accent)}
+  /* подсветка незаполненного обязательного поля */
+  .card-head input.title.invalid{border:1px solid var(--fail); background:#fdecea; border-radius:6px; padding:4px 8px}
+  .req-hint{font-size:11px; color:var(--fail); margin:2px 0 0 34px}
+  .del{border:none; background:none; color:var(--muted); cursor:pointer; font-size:16px; padding:2px 6px; border-radius:6px}
+  .del:hover{background:#fdecea; color:var(--fail)}
+
+  .row{display:grid; grid-template-columns:130px 1fr; gap:10px; margin-bottom:10px; align-items:start}
+  .row > label{color:var(--muted); font-size:13px; padding-top:7px}
+  .row textarea, .row input[type=text]{width:100%; border:1px solid var(--line); border-radius:6px; padding:7px 9px; font-family:inherit; font-size:13px; color:var(--ink); background:#fff}
+  .row textarea{resize:none; overflow:hidden; min-height:34px; line-height:1.45}
+  .row textarea:focus, .row input:focus{outline:none; border-color:var(--accent)}
+  select{border:1px solid var(--line); border-radius:6px; padding:7px 9px; font-size:13px; background:#fff; color:var(--ink)}
+
+  /* ─── скрины + dropzone ─── */
+  .dropzone{border:1px dashed var(--line); border-radius:8px; padding:8px; margin-top:6px; transition:.15s}
+  /* кликнутая зона ждёт Ctrl+V; focus-within — чтобы кнопки внутри её не гасили */
+  .dropzone:focus{outline:none}
+  .dropzone:focus-within{border-color:var(--accent); background:var(--accent-soft)}
+  .dz-hint .ready{display:none}
+  .dropzone:focus-within .dz-hint .idle{display:none}
+  .dropzone:focus-within .dz-hint .ready{display:inline; color:var(--accent); font-weight:500}
+  .dropzone.drag{border-color:var(--accent); background:var(--accent-soft)}
+  .dropzone.err{border-color:var(--fail); background:#fdecea}
+  .dz-error{font-size:12px; color:var(--fail); margin-top:6px; padding-left:2px; font-weight:500}
+  .shots{display:flex; flex-wrap:wrap; gap:8px}
+  .shot{position:relative; border:1px solid var(--line); border-radius:8px; overflow:hidden; width:120px; background:#fafbfc}
+  .shot img{width:100%; height:70px; object-fit:cover; display:block}
+  .shot .cap{font-size:11px; padding:4px 6px; color:var(--muted); border-top:1px solid var(--line); cursor:text}
+  .shot .cap.empty{color:#b3bac2}
+  .shot .x{position:absolute; top:3px; right:3px; background:rgba(0,0,0,.55); color:#fff; border:none; border-radius:50%; width:18px; height:18px; cursor:pointer; font-size:11px; line-height:1; display:flex; align-items:center; justify-content:center}
+  .add-shot{width:120px; height:96px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--muted); cursor:pointer; font-size:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:6px; gap:4px}
+  .add-shot:hover{border-color:var(--accent); color:var(--accent)}
+  .add-shot .ic{font-size:18px}
+  .dz-hint{font-size:11px; color:var(--muted); margin-top:6px; padding-left:2px}
+
+  .btn{border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; border-radius:8px; padding:9px 16px; font-size:14px; font-weight:500}
+  .btn:hover{filter:brightness(1.05)}
+  .btn:disabled{opacity:.55; cursor:default; filter:none}
+  .btn.ghost{background:#fff; color:var(--accent)}
+  .btn.big{padding:11px 22px; font-size:15px}
+  .add-case{width:100%; border:1px dashed var(--line); background:#fff; color:var(--muted); padding:12px; border-radius:var(--radius); cursor:pointer; font-size:14px; font-weight:500}
+  .add-case:hover{border-color:var(--accent); color:var(--accent)}
+
+  .footbar{position:fixed; bottom:0; left:0; right:0; background:var(--panel); border-top:1px solid var(--line); padding:12px 24px; display:flex; gap:14px; align-items:center; z-index:20}
+  .footbar .status{color:var(--muted); font-size:13px}
+  .footbar .status.error{color:var(--fail)}
+  .out-links a{color:var(--accent); margin-left:14px; font-weight:500; text-decoration:none}
+  .out-links a:hover{text-decoration:underline}
+  .empty{color:var(--muted); text-align:center; padding:30px}
+
+  /* ─── плашка восстановления сессии (в контенте, под «Добавить кейс») ─── */
+  .resume-bar{
+    margin:22px auto 0; max-width:600px; background:#f1f4f9; border:1px solid var(--line);
+    border-radius:10px; padding:10px 14px; display:flex; align-items:center; gap:10px;
+    font-size:13px; color:var(--muted);
+  }
+  .resume-bar .ic{font-size:15px; opacity:.7; flex-shrink:0}
+  .resume-bar .txt{flex:1; min-width:0}
+  .resume-bar .name{color:var(--ink); font-weight:500}
+  .resume-bar .go{
+    border:none; background:none; color:var(--accent); font-weight:600; cursor:pointer;
+    font-size:13px; padding:4px 8px; border-radius:6px; flex-shrink:0;
+  }
+  .resume-bar .go:hover{background:var(--accent-soft)}
+  .resume-bar .cls{
+    border:none; background:none; color:#aab2bd; cursor:pointer; font-size:15px;
+    padding:2px 4px; border-radius:6px; flex-shrink:0; line-height:1;
+  }
+  .resume-bar .cls:hover{color:var(--fail)}
+
+  /* ─── стек уведомлений (правый верхний угол) ─── */
+  .toasts{
+    position:fixed; top:70px; right:22px; z-index:60;
+    display:flex; flex-direction:column; gap:10px; align-items:flex-end;
+  }
+  .toast{
+    background:#fff; border:1px solid var(--line); border-radius:10px;
+    box-shadow:0 6px 20px rgba(20,28,40,.12); padding:11px 14px;
+    display:flex; align-items:center; gap:12px; font-size:13px; color:var(--ink);
+    max-width:360px; animation:toast-in .18s ease-out;
+  }
+  @keyframes toast-in{from{opacity:0; transform:translateX(12px)}to{opacity:1; transform:none}}
+  .toast .t{flex:1; min-width:0}
+  .toast .t b{font-weight:600}
+  .toast .undo{
+    border:none; background:none; color:var(--accent); font-weight:600; cursor:pointer;
+    font-size:13px; padding:4px 8px; border-radius:6px; flex-shrink:0;
+  }
+  .toast .undo:hover{background:var(--accent-soft)}
+
+/* ─── поля-списки (задачи, шаги, ожидаемый, результат) ─── */
+.list-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--list-gap);
+}
+
+.list-num {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  padding-top: 7px;
+  min-width: calc(var(--field-indent) - var(--list-gap));
+  text-align: right;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.list-item textarea {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+  overflow: hidden;
+  min-height: 34px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: #fff;
+}
+
+.list-item textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.list-del {
+  border: none;
+  background: none;
+  color: #aab2bd;
+  cursor: pointer;
+  font-size: 14px;
+  width: var(--list-del);
+  padding: 6px 0;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.list-del:hover {
+  background: #fdecea;
+  color: var(--fail);
+}
+
+.list-del.hidden {
+  visibility: hidden;
+}
+
+.list-add {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 6px;
+  border-radius: 6px;
+  margin-left: var(--field-indent);
+}
+
+.list-add:hover {
+  background: var(--accent-soft);
+}
+
+.field-body {
+  padding-left: var(--field-indent);
+  padding-right: var(--field-tail);
+}
+
+.row textarea,
+.list-item textarea { overflow-wrap: break-word; }
+
+.row > div { min-width: 0; }
