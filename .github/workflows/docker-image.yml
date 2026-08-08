@@ -1,4 +1,4 @@
-name: Build Docker image
+name: Docker Image CI
 
 on:
   push:
@@ -34,3 +34,11 @@ jobs:
         run: |
           docker push ghcr.io/vadimpidchenko/get_report:latest
           docker push ghcr.io/vadimpidchenko/get_report:sha-$SHORT_SHA
+
+      - name: Delete old package versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: get_report
+          package-type: container
+          min-versions-to-keep: 5
+          token: ${{ secrets.GITHUB_TOKEN }}
