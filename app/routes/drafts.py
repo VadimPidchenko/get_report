@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api", tags=["drafts"])
 
 @router.get("/empty")
 def get_empty_draft():
-    """Заготовка нового черновика — фронт открывает её при старте."""
+    """Заготовка нового черновика — фронт 123 открывает её при старте."""
     return drafts_service.build_empty_draft()
 
 
