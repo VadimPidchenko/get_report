@@ -8,6 +8,7 @@ generator/node_modules/
 # IDE и локальные инструменты
 .idea/
 .claude/
+AGENTS.md
 
 # Пользовательские данные приложения
 drafts/*

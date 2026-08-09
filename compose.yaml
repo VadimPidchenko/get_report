@@ -1,7 +1,6 @@
 services:
   app:
-    image: report-builder
-    build: .
+    image: ghcr.io/vadimpidchenko/get_report:latest
     ports:
       - "8000:8000"
     volumes:
