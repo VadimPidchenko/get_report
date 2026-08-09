@@ -126,14 +126,14 @@ export const createTestCase = () => ({
   expected_images: [],
   result: [""],
   result_images: [],
-  status: "Passed",
+  status: "",
 });
 
 export const createBug = () => ({
   title: "",
   tasks: [""],
   desc: "",
-  status: "To Do",
+  status: "",
   images: [],
 });
 

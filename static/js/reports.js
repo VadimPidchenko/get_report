@@ -7,9 +7,9 @@
 import * as api from "./api.js";
 import { byId } from "./dom.js";
 import { currentDraft, collectHeaderFields, saveNow } from "./state.js";
-import { setStatusMessage } from "./notifications.js";
+import { setStatusMessage, showToast } from "./notifications.js";
 
-const VALIDATION_MESSAGE_TIMEOUT_MS = 4000;
+const VALIDATION_MESSAGE_TIMEOUT_MS = 4500;
 const SCROLL_FOCUS_DELAY_MS = 300;
 
 const downloadButtons = () => [byId("dlDocx"), byId("dlPdf")];
@@ -31,7 +31,7 @@ export function refreshDownloadButtons() {
 /** Снимает подсветку с исправленного поля. */
 export function clearFieldError(input) {
   input.classList.remove("invalid");
-  input.closest(".card")?.querySelector(".req-hint")?.remove();
+  input.closest(".card")?.querySelector(`.req-hint[data-error-for="${input.id}"]`)?.remove();
 }
 
 function markFieldInvalid(itemType, itemIndex) {
@@ -43,6 +43,7 @@ function markFieldInvalid(itemType, itemIndex) {
   if (head && !head.parentElement.querySelector(".req-hint")) {
     const hint = document.createElement("div");
     hint.className = "req-hint";
+    hint.dataset.errorFor = input.id;
     hint.textContent = "Обязательное поле";
     head.insertAdjacentElement("afterend", hint);
   }
@@ -52,6 +53,7 @@ function markFieldInvalid(itemType, itemIndex) {
 function setProblemMessage(text) {
   byId("statusMsg").classList.add("error");
   setStatusMessage(text, VALIDATION_MESSAGE_TIMEOUT_MS);
+  showToast(text, { timeout: VALIDATION_MESSAGE_TIMEOUT_MS, kind: "error" });
 }
 
 /** Проект обязателен: без него в шапке отчёта пустое место. */
@@ -79,6 +81,25 @@ function findItemsWithoutTitle() {
   return problems;
 }
 
+/** Ищет кейсы и баг-репорты, у которых статус ещё не выбран. */
+function findItemsWithoutStatus() {
+  const problems = [];
+
+  currentDraft.cases.forEach((testCase, index) => {
+    if (!String(testCase.status || "").trim()) problems.push({ itemType: "case", index });
+  });
+  currentDraft.bugs.forEach((bug, index) => {
+    if (!String(bug.status || "").trim()) problems.push({ itemType: "bug", index });
+  });
+
+  return problems;
+}
+
+/** Форма слова после «в N»: в 1/21 кейсе, но в 2/5/11 кейсах. */
+function locationForm(count, one, many) {
+  return count % 10 === 1 && count % 100 !== 11 ? one : many;
+}
+
 /** Подсвечивает проблемные поля и переводит внимание на первое из них. */
 function highlightMissingTitles(problems) {
   const first = problems[0];
@@ -103,6 +124,36 @@ function highlightMissingTitles(problems) {
   setProblemMessage(message);
 }
 
+/** Подсвечивает пустые статусы и переводит пользователя к первому из них. */
+function highlightMissingStatuses(problems) {
+  const first = problems[0];
+  const requiredTab = first.itemType === "case" ? "cases" : "bugs";
+
+  const activeTab = document.querySelector(".tab.active")?.dataset.tab;
+  if (activeTab !== requiredTab) {
+    document.querySelector(`.tab[data-tab="${requiredTab}"]`)?.click();
+  }
+
+  problems.forEach(({ itemType, index }) => {
+    byId(`status-${itemType}-${index}`)?.classList.add("invalid");
+  });
+
+  const dropdown = byId(`status-${first.itemType}-${first.index}`);
+  if (dropdown) {
+    dropdown.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => dropdown.querySelector(".status-trigger")?.focus(), SCROLL_FOCUS_DELAY_MS);
+  }
+
+  const caseCount = problems.filter(({ itemType }) => itemType === "case").length;
+  const bugCount = problems.length - caseCount;
+  const details = [
+    caseCount ? `в ${caseCount} ${locationForm(caseCount, "тест-кейсе", "тест-кейсах")}` : "",
+    bugCount ? `в ${bugCount} ${locationForm(bugCount, "баг-репорте", "баг-репортах")}` : "",
+  ].filter(Boolean).join(" и ");
+  const statusWord = problems.length === 1 ? "статус" : "статусы";
+  setProblemMessage(`Выберите ${statusWord} ${details}`);
+}
+
 /** Отдаёт файл браузеру через скрытую ссылку. */
 function triggerDownload(url) {
   const link = document.createElement("a");
@@ -125,6 +176,12 @@ async function downloadReport(outputFormat, button) {
   const problems = findItemsWithoutTitle();
   if (problems.length) {
     highlightMissingTitles(problems);
+    return;
+  }
+
+  const missingStatuses = findItemsWithoutStatus();
+  if (missingStatuses.length) {
+    highlightMissingStatuses(missingStatuses);
     return;
   }
 

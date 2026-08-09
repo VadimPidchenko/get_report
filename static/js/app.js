@@ -27,6 +27,7 @@ import {
   setResumeCandidate,
   clearResumeCandidate,
   getResumeCandidate,
+  statusClass,
 } from "./render.js";
 import {
   refreshDraftList,
@@ -56,6 +57,51 @@ import {
 function updateField(itemType, itemIndex, fieldName, value) {
   itemsOf(itemType)[itemIndex][fieldName] = value;
   scheduleSave();
+}
+
+function closeStatusDropdowns(except = null) {
+  document.querySelectorAll(".status-dropdown.open").forEach((dropdown) => {
+    if (dropdown === except) return;
+    dropdown.classList.remove("open");
+    dropdown.querySelector(".status-trigger")?.setAttribute("aria-expanded", "false");
+  });
+}
+
+/** Открывает меню статуса и закрывает другое открытое меню. */
+function toggleStatusDropdown(dropdown, event) {
+  event.stopPropagation();
+  const willOpen = !dropdown.classList.contains("open");
+  closeStatusDropdowns(dropdown);
+  dropdown.classList.toggle("open", willOpen);
+  dropdown.querySelector(".status-trigger")?.setAttribute("aria-expanded", String(willOpen));
+}
+
+/** Выбирает статус, закрывает меню и снимает мышиный фокус с поля. */
+function chooseStatus(itemType, itemIndex, status, option, event) {
+  event.stopPropagation();
+  updateField(itemType, itemIndex, "status", status);
+
+  const dropdown = option.closest(".status-dropdown");
+  dropdown.className = `status-dropdown status-${statusClass(status)}`;
+  dropdown.querySelector(".status-label").textContent = status || "Не выбран";
+  dropdown.querySelector(".status-trigger").setAttribute("aria-expanded", "false");
+  dropdown.querySelectorAll(".status-option").forEach((item) => {
+    const selected = item === option;
+    item.classList.toggle("selected", selected);
+    item.setAttribute("aria-selected", String(selected));
+  });
+
+  clearFieldError(dropdown);
+  option.blur();
+}
+
+function initStatusDropdowns() {
+  document.addEventListener("click", () => closeStatusDropdowns());
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    closeStatusDropdowns();
+    document.activeElement?.blur();
+  });
 }
 
 function updateListItem(itemType, itemIndex, fieldName, pointIndex, value) {
@@ -127,6 +173,8 @@ function exposeInlineHandlers() {
   // noinspection JSUnusedGlobalSymbols
   Object.assign(window, {
     updateField,
+    toggleStatusDropdown,
+    chooseStatus,
     addItem,
     removeItem,
     pickImageFile,
@@ -268,6 +316,7 @@ async function init() {
   initHeaderFields();
   initSidebar();
   initAutoGrow();
+  initStatusDropdowns();
   initScrollMemory();
   initDragAndDrop();
   initPasteImages();

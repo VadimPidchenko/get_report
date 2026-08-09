@@ -18,11 +18,11 @@ export function setStatusMessage(text, clearAfterMs = 0) {
  * Показывает уведомление в правом верхнем углу.
  * Уведомления складываются стопкой, каждое живёт своим таймером.
  * @param {string} html
- * @param {{timeout?: number, onUndo?: (() => void|Promise<void>)|null}} [options]
+ * @param {{timeout?: number, onUndo?: (() => void|Promise<void>)|null, kind?: string}} [options]
  */
-export function showToast(html, { timeout = DEFAULT_TIMEOUT_MS, onUndo = null } = {}) {
+export function showToast(html, { timeout = DEFAULT_TIMEOUT_MS, onUndo = null, kind = "" } = {}) {
   const toast = document.createElement("div");
-  toast.className = "toast";
+  toast.className = `toast ${kind}`.trim();
   toast.innerHTML = `<span class="t">${html}</span>`;
 
   const close = () => {
