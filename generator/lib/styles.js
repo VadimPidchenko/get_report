@@ -4,9 +4,12 @@
 const FONT_FAMILY = "Arial";
 const BASE_FONT_SIZE = 22; // половины пункта, то есть 11pt
 
-// Максимальная ширина картинки в документе. Учитывает отступ слева:
-// при большем значении широкие скриншоты вылезут за поле страницы.
-const MAX_IMAGE_WIDTH = 500;
+// Максимальная ширина оставляет небольшой запас внутри полей A4.
+const MAX_IMAGE_WIDTH = 600;
+
+// Высокие вертикальные скриншоты при ограничении только по ширине могут быть
+// выше полезной области A4. Оставляем место для подписи и статуса.
+const MAX_IMAGE_HEIGHT = 820;
 
 // Отступы нумерованного текста внутри поля
 const LIST_INDENT_LEFT = 720; // сдвиг всего абзаца
@@ -18,6 +21,7 @@ const SPACING = {
   afterLabel: 80, // под заголовком поля
   afterParagraph: 120, // под обычным абзацем
   afterImage: 40, // под картинкой
+  afterImageWithoutCaption: 140, // между картинками без подписей
   beforeFirstImage: 200, // между заголовком и первой картинкой
   beforeNextImage: 60, // между соседними картинками
   afterStatus: 240, // под строкой статуса
@@ -53,6 +57,7 @@ module.exports = {
   FONT_FAMILY,
   BASE_FONT_SIZE,
   MAX_IMAGE_WIDTH,
+  MAX_IMAGE_HEIGHT,
   LIST_INDENT_LEFT,
   LIST_INDENT_HANGING,
   PLAIN_INDENT_LEFT,
