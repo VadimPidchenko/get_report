@@ -11,12 +11,14 @@ const {
   ExternalHyperlink,
   BorderStyle,
   PageBreak,
+  AlignmentType,
 } = require("docx");
 
 const {
   FONT_FAMILY,
   BASE_FONT_SIZE,
   MAX_IMAGE_WIDTH,
+  MAX_IMAGE_HEIGHT,
   LIST_INDENT_LEFT,
   LIST_INDENT_HANGING,
   PLAIN_INDENT_LEFT,
@@ -197,7 +199,13 @@ function imageBlock(imagesDir, filename, caption, isFirstInBlock) {
   // Uint8Array, а не Buffer: image-size и docx объявлены именно на нём
   const content = new Uint8Array(fs.readFileSync(fullPath));
   const dimensions = imageSize(content);
-  const scale = Math.min(1, MAX_IMAGE_WIDTH / dimensions.width);
+  const scale = Math.min(
+    1,
+    MAX_IMAGE_WIDTH / dimensions.width,
+    MAX_IMAGE_HEIGHT / dimensions.height,
+  );
+  const renderedWidth = Math.round(dimensions.width * scale);
+  const renderedHeight = Math.round(dimensions.height * scale);
   const extension = path.extname(filename).slice(1).toLowerCase();
 
   const blocks = [
@@ -208,14 +216,16 @@ function imageBlock(imagesDir, filename, caption, isFirstInBlock) {
         data: content,
         type: extension === "jpg" ? "jpg" : extension,
         transformation: {
-          width: Math.round(dimensions.width * scale),
-          height: Math.round(dimensions.height * scale),
+          width: renderedWidth,
+          height: renderedHeight,
         },
       })],
       {
-        after: SPACING.afterImage,
+        after: caption ? SPACING.afterImage : SPACING.afterImageWithoutCaption,
         before: isFirstInBlock ? SPACING.beforeFirstImage : SPACING.beforeNextImage,
-        indent: { left: LIST_INDENT_LEFT },
+        alignment: AlignmentType.CENTER,
+        // Подпись не должна отрываться от картинки на следующую страницу.
+        keepNext: Boolean(caption),
       },
     ),
   ];
@@ -223,6 +233,7 @@ function imageBlock(imagesDir, filename, caption, isFirstInBlock) {
   if (caption) {
     blocks.push(paragraph([textRun(caption, { size: 18, color: COLORS.caption })], {
       after: SPACING.afterCaption,
+      alignment: AlignmentType.CENTER,
     }));
   }
 
