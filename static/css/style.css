@@ -151,6 +151,54 @@
   .row textarea:focus, .row input:focus{outline:none; border-color:var(--accent)}
   select{border:1px solid var(--line); border-radius:6px; padding:7px 9px; font-size:13px; background:#fff; color:var(--ink)}
 
+  /* Собственный dropdown статуса: меню полностью контролируется стилями проекта. */
+  .status-dropdown{position:relative; display:inline-block; min-width:155px}
+  .status-trigger{
+    width:100%; min-height:34px; border:1px solid var(--line); border-radius:7px;
+    padding:7px 34px 7px 10px; background:#fff; color:var(--ink); cursor:pointer;
+    font-family:inherit; font-size:13px; font-weight:600; line-height:1.4;
+    text-align:left; transition:border-color .15s, background-color .15s;
+  }
+  .status-trigger:focus{outline:none}
+  .status-trigger:focus-visible{box-shadow:0 0 0 3px var(--accent-soft)}
+  .status-arrow{
+    position:absolute; right:12px; top:13px; width:7px; height:7px;
+    border-right:2px solid currentColor; border-bottom:2px solid currentColor;
+    transform:rotate(45deg); pointer-events:none; opacity:.65; transition:transform .15s;
+  }
+  .status-dropdown.open .status-arrow{transform:translateY(3px) rotate(225deg)}
+  .status-options{
+    display:none; position:absolute; top:calc(100% + 5px); left:0; z-index:30;
+    min-width:100%; padding:5px; background:#fff; border:1px solid var(--line);
+    border-radius:9px; box-shadow:0 8px 24px rgba(20,28,40,.14);
+  }
+  .status-dropdown.open .status-options{display:flex; flex-direction:column; gap:2px}
+  .status-option{
+    display:flex; align-items:center; gap:8px; width:100%; border:none; border-radius:6px;
+    padding:7px 9px; background:transparent; color:var(--ink); cursor:pointer;
+    font-family:inherit; font-size:13px; font-weight:400; line-height:1.3;
+    text-align:left; white-space:nowrap;
+  }
+  .status-option:hover,
+  .status-option.selected{background:var(--accent-soft)}
+  .status-option.selected{font-weight:600}
+  .status-dot{width:8px; height:8px; border-radius:50%; background:#b6bdc7; flex-shrink:0}
+  .status-option.status-passed .status-dot,
+  .status-option.status-done .status-dot{background:var(--ok)}
+  .status-option.status-failed .status-dot{background:var(--fail)}
+  .status-option.status-blocked .status-dot,
+  .status-option.status-in-progress .status-dot{background:var(--warn)}
+  .status-dropdown.status-none .status-trigger{color:var(--muted)}
+  .status-dropdown.status-passed .status-trigger,
+  .status-dropdown.status-done .status-trigger{color:var(--ok); background:#edf7ee; border-color:#b8dcbc}
+  .status-dropdown.status-failed .status-trigger{color:var(--fail); background:#fdecea; border-color:#efb8b2}
+  .status-dropdown.status-blocked .status-trigger,
+  .status-dropdown.status-in-progress .status-trigger{color:var(--warn); background:#fff4e5; border-color:#f0cca0}
+  .status-dropdown.status-skipped .status-trigger,
+  .status-dropdown.status-to-do .status-trigger,
+  .status-dropdown.status-backlog .status-trigger{color:var(--muted); background:#f4f5f7; border-color:#d5d9df}
+  .status-dropdown.invalid .status-trigger{border-color:var(--fail); box-shadow:0 0 0 3px #fdecea}
+
   /* ─── скрины + dropzone ─── */
   .dropzone{border:1px dashed var(--line); border-radius:8px; padding:8px; margin-top:6px; transition:.15s}
   /* кликнутая зона ждёт Ctrl+V; focus-within — чтобы кнопки внутри её не гасили */
@@ -210,7 +258,7 @@
 
   /* ─── стек уведомлений (правый верхний угол) ─── */
   .toasts{
-    position:fixed; top:70px; right:22px; z-index:60;
+    position:fixed; top:92px; right:24px; z-index:60;
     display:flex; flex-direction:column; gap:10px; align-items:flex-end;
   }
   .toast{
@@ -222,6 +270,10 @@
   @keyframes toast-in{from{opacity:0; transform:translateX(12px)}to{opacity:1; transform:none}}
   .toast .t{flex:1; min-width:0}
   .toast .t b{font-weight:600}
+  .toast.error{
+    color:#8f302b; background:#fff9f8; border-color:#efcfcb;
+    border-left:3px solid #d85b52; box-shadow:0 6px 18px rgba(120,35,28,.1);
+  }
   .toast .undo{
     border:none; background:none; color:var(--accent); font-weight:600; cursor:pointer;
     font-size:13px; padding:4px 8px; border-radius:6px; flex-shrink:0;

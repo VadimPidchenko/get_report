@@ -11,6 +11,20 @@ import * as api from "./api.js";
 export const CASE_STATUSES = ["Passed", "Failed", "Blocked", "Skipped"];
 export const BUG_STATUSES = ["To Do", "In Progress", "Done", "Backlog"];
 
+const STATUS_CLASSES = {
+  Passed: "passed",
+  Failed: "failed",
+  Blocked: "blocked",
+  Skipped: "skipped",
+  "To Do": "to-do",
+  "In Progress": "in-progress",
+  Done: "done",
+  Backlog: "backlog",
+};
+
+/** CSS-модификатор выбранного статуса. Пустое значение остаётся нейтральным. */
+export const statusClass = (status) => STATUS_CLASSES[status] || "none";
+
 /** Черновик, который предлагается восстановить при запуске. */
 let resumeCandidate = null;
 
@@ -97,10 +111,31 @@ function renderImageField(images, itemType, itemIndex, fieldName) {
 }
 
 function renderStatusSelect(itemType, itemIndex, currentStatus, options) {
-  const choices = options
-    .map((status) => `<option ${currentStatus === status ? "selected" : ""}>${status}</option>`)
+  const allOptions = ["", ...options];
+  const choices = allOptions
+    .map((status) => {
+      const label = status || "Не выбран";
+      const selected = currentStatus === status;
+      return `
+        <button type="button" role="option" aria-selected="${selected}"
+                class="status-option status-${statusClass(status)} ${selected ? "selected" : ""}"
+                onclick="chooseStatus('${itemType}',${itemIndex},'${status}',this,event)">
+          <span class="status-dot"></span>${label}
+        </button>`;
+    })
     .join("");
-  return `<select onchange="updateField('${itemType}',${itemIndex},'status',this.value)">${choices}</select>`;
+  return `
+    <div id="status-${itemType}-${itemIndex}"
+         class="status-dropdown status-${statusClass(currentStatus)}">
+      <button type="button" class="status-trigger" aria-haspopup="listbox" aria-expanded="false"
+              onclick="toggleStatusDropdown(this.parentElement,event)">
+        <span class="status-label">${currentStatus || "Не выбран"}</span>
+        <span class="status-arrow"></span>
+      </button>
+      <div class="status-options" role="listbox">
+        ${choices}
+      </div>
+    </div>`;
 }
 
 function renderTestCase(testCase, index) {
