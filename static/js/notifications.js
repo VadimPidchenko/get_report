@@ -3,6 +3,8 @@
 import { byId } from "./dom.js";
 
 const DEFAULT_TIMEOUT_MS = 5000;
+const EXIT_MS = 180;
+const MAX_TOASTS = 4;
 
 /** Текст в нижней панели рядом с кнопками скачивания. */
 export function setStatusMessage(text, clearAfterMs = 0) {
@@ -16,31 +18,51 @@ export function setStatusMessage(text, clearAfterMs = 0) {
 
 /**
  * Показывает уведомление в правом верхнем углу.
- * Уведомления складываются стопкой, каждое живёт своим таймером.
+ * Уведомления складываются стопкой; для error/warning доступно ручное закрытие.
  * @param {string} html
- * @param {{timeout?: number, onUndo?: (() => void|Promise<void>)|null, kind?: string}} [options]
+ * @param {{timeout?: number, onUndo?: (() => void|Promise<void>)|null, kind?: string, key?: string}} [options]
  */
-export function showToast(html, { timeout = DEFAULT_TIMEOUT_MS, onUndo = null, kind = "" } = {}) {
+export function showToast(html, { timeout = DEFAULT_TIMEOUT_MS, onUndo = null, kind = "", key = "" } = {}) {
+  const container = byId("toasts");
+  if (key) container.querySelectorAll(`.toast[data-toast-key="${key}"]`).forEach((item) => item.remove());
   const toast = document.createElement("div");
   toast.className = `toast ${kind}`.trim();
+  if (key) toast.dataset.toastKey = key;
   toast.innerHTML = `<span class="t">${html}</span>`;
 
+  let timer = null;
+  let closed = false;
+
   const close = () => {
+    if (closed) return;
+    closed = true;
     clearTimeout(timer);
-    toast.remove();
+    toast.classList.add("leaving");
+    setTimeout(() => toast.remove(), EXIT_MS);
   };
 
   if (onUndo) {
     const undoButton = document.createElement("button");
     undoButton.className = "undo";
     undoButton.textContent = "Отменить";
-    undoButton.onclick = () => {
-      onUndo();
+    undoButton.onclick = async () => {
+      await onUndo();
       close();
     };
     toast.appendChild(undoButton);
   }
 
-  const timer = setTimeout(close, timeout);
-  byId("toasts").appendChild(toast);
+  if (kind === "error" || kind === "warning") {
+    const closeButton = document.createElement("button");
+    closeButton.className = "toast-close";
+    closeButton.type = "button";
+    closeButton.setAttribute("aria-label", "Закрыть уведомление");
+    closeButton.textContent = "×";
+    closeButton.onclick = close;
+    toast.appendChild(closeButton);
+  }
+
+  container.appendChild(toast);
+  while (container.children.length > MAX_TOASTS) container.firstElementChild?.remove();
+  timer = setTimeout(close, timeout);
 }

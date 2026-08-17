@@ -31,7 +31,8 @@ export function refreshDownloadButtons() {
 /** Снимает подсветку с исправленного поля. */
 export function clearFieldError(input) {
   input.classList.remove("invalid");
-  input.closest(".card")?.querySelector(`.req-hint[data-error-for="${input.id}"]`)?.remove();
+  if (input.id === "projectDropdown") byId("project")?.classList.remove("invalid");
+  input.closest?.(".card")?.querySelector(`.req-hint[data-error-for="${input.id}"]`)?.remove();
 }
 
 function markFieldInvalid(itemType, itemIndex) {
@@ -53,7 +54,7 @@ function markFieldInvalid(itemType, itemIndex) {
 function setProblemMessage(text) {
   byId("statusMsg").classList.add("error");
   setStatusMessage(text, VALIDATION_MESSAGE_TIMEOUT_MS);
-  showToast(text, { timeout: VALIDATION_MESSAGE_TIMEOUT_MS, kind: "error" });
+  showToast(text, { timeout: VALIDATION_MESSAGE_TIMEOUT_MS, kind: "error", key: "validation" });
 }
 
 /** Проект обязателен: без него в шапке отчёта пустое место. */
@@ -61,97 +62,86 @@ function validateProject() {
   const select = byId("project");
   if (select.value) return true;
 
-  select.classList.add("invalid");
-  select.focus();
+  const dropdown = byId("projectDropdown");
+  dropdown.classList.add("invalid");
+  byId("projectTrigger")?.focus();
   setProblemMessage("Выберите проект");
   return false;
 }
 
-/** Ищет кейсы и баги без названия. */
-function findItemsWithoutTitle() {
-  const problems = [];
+/** Собирает обязательные поля, которые не заполнены, отдельно по вкладкам. */
+function collectRequiredFieldProblems() {
+  const problems = { cases: [], bugs: [] };
 
   currentDraft.cases.forEach((testCase, index) => {
-    if (!String(testCase.name || "").trim()) problems.push({ itemType: "case", index });
+    if (!String(testCase.name || "").trim()) {
+      problems.cases.push({ kind: "title", itemType: "case", index });
+    }
+    if (!String(testCase.status || "").trim()) {
+      problems.cases.push({ kind: "status", itemType: "case", index });
+    }
   });
+
   currentDraft.bugs.forEach((bug, index) => {
-    if (!String(bug.title || "").trim()) problems.push({ itemType: "bug", index });
+    if (!String(bug.title || "").trim()) {
+      problems.bugs.push({ kind: "title", itemType: "bug", index });
+    }
+    if (!String(bug.status || "").trim()) {
+      problems.bugs.push({ kind: "status", itemType: "bug", index });
+    }
   });
 
   return problems;
 }
 
-/** Ищет кейсы и баг-репорты, у которых статус ещё не выбран. */
-function findItemsWithoutStatus() {
-  const problems = [];
+function targetForProblem(problem) {
+  if (problem.kind === "title") {
+    const input = byId(`title-${problem.itemType}-${problem.index}`);
+    return { container: input, focusTarget: input };
+  }
 
-  currentDraft.cases.forEach((testCase, index) => {
-    if (!String(testCase.status || "").trim()) problems.push({ itemType: "case", index });
-  });
-  currentDraft.bugs.forEach((bug, index) => {
-    if (!String(bug.status || "").trim()) problems.push({ itemType: "bug", index });
-  });
-
-  return problems;
+  const dropdown = byId(`status-${problem.itemType}-${problem.index}`);
+  return { container: dropdown, focusTarget: dropdown?.querySelector(".status-trigger") };
 }
 
-/** Форма слова после «в N»: в 1/21 кейсе, но в 2/5/11 кейсах. */
-function locationForm(count, one, many) {
-  return count % 10 === 1 && count % 100 !== 11 ? one : many;
+function markProblemInvalid(problem) {
+  if (problem.kind === "title") {
+    markFieldInvalid(problem.itemType, problem.index);
+    return;
+  }
+  byId(`status-${problem.itemType}-${problem.index}`)?.classList.add("invalid");
 }
 
-/** Подсвечивает проблемные поля и переводит внимание на первое из них. */
-function highlightMissingTitles(problems) {
-  const first = problems[0];
-  const requiredTab = first.itemType === "case" ? "cases" : "bugs";
+/**
+ * Показывает ошибки только на одной вкладке за попытку генерации.
+ * Если на текущей вкладке есть ошибки — остаёмся на ней и показываем их все
+ * (и названия, и статусы). На другую вкладку переходим только после того,
+ * как текущая исправлена. Так validation не "мотает" пользователя туда-сюда.
+ */
+function highlightRequiredFields(problemsByTab) {
+  const activeTab = document.querySelector(".tab.active")?.dataset.tab || "cases";
+  const currentProblems = problemsByTab[activeTab] || [];
+  const targetTab = currentProblems.length
+    ? activeTab
+    : (problemsByTab.cases.length ? "cases" : (problemsByTab.bugs.length ? "bugs" : null));
 
-  const activeTab = document.querySelector(".tab.active")?.dataset.tab;
-  if (activeTab !== requiredTab) {
-    document.querySelector(`.tab[data-tab="${requiredTab}"]`)?.click();
+  if (!targetTab) return false;
+
+  if (activeTab !== targetTab) {
+    document.querySelector(`.tab[data-tab="${targetTab}"]`)?.click();
   }
 
-  problems.forEach(({ itemType, index }) => markFieldInvalid(itemType, index));
+  const problems = problemsByTab[targetTab];
+  problems.forEach(markProblemInvalid);
 
-  const input = byId(`title-${first.itemType}-${first.index}`);
-  if (input) {
-    input.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => input.focus(), SCROLL_FOCUS_DELAY_MS);
+  const firstTarget = targetForProblem(problems[0]);
+  if (firstTarget.container) {
+    firstTarget.container.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => firstTarget.focusTarget?.focus(), SCROLL_FOCUS_DELAY_MS);
   }
 
-  const message = problems.length === 1
-    ? "Заполните название"
-    : `Заполните названия (${problems.length})`;
-  setProblemMessage(message);
-}
-
-/** Подсвечивает пустые статусы и переводит пользователя к первому из них. */
-function highlightMissingStatuses(problems) {
-  const first = problems[0];
-  const requiredTab = first.itemType === "case" ? "cases" : "bugs";
-
-  const activeTab = document.querySelector(".tab.active")?.dataset.tab;
-  if (activeTab !== requiredTab) {
-    document.querySelector(`.tab[data-tab="${requiredTab}"]`)?.click();
-  }
-
-  problems.forEach(({ itemType, index }) => {
-    byId(`status-${itemType}-${index}`)?.classList.add("invalid");
-  });
-
-  const dropdown = byId(`status-${first.itemType}-${first.index}`);
-  if (dropdown) {
-    dropdown.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => dropdown.querySelector(".status-trigger")?.focus(), SCROLL_FOCUS_DELAY_MS);
-  }
-
-  const caseCount = problems.filter(({ itemType }) => itemType === "case").length;
-  const bugCount = problems.length - caseCount;
-  const details = [
-    caseCount ? `в ${caseCount} ${locationForm(caseCount, "тест-кейсе", "тест-кейсах")}` : "",
-    bugCount ? `в ${bugCount} ${locationForm(bugCount, "баг-репорте", "баг-репортах")}` : "",
-  ].filter(Boolean).join(" и ");
-  const statusWord = problems.length === 1 ? "статус" : "статусы";
-  setProblemMessage(`Выберите ${statusWord} ${details}`);
+  setProblemMessage("Заполните обязательные поля");
+  return true;
 }
 
 /** Отдаёт файл браузеру через скрытую ссылку. */
@@ -173,17 +163,8 @@ async function downloadReport(outputFormat, button) {
   // а названия кейсов могут потребовать переключения вкладки
   if (!validateProject()) return;
 
-  const problems = findItemsWithoutTitle();
-  if (problems.length) {
-    highlightMissingTitles(problems);
-    return;
-  }
-
-  const missingStatuses = findItemsWithoutStatus();
-  if (missingStatuses.length) {
-    highlightMissingStatuses(missingStatuses);
-    return;
-  }
+  const requiredFieldProblems = collectRequiredFieldProblems();
+  if (highlightRequiredFields(requiredFieldProblems)) return;
 
   const originalLabel = button.textContent;
   setButtonsBusy(true);
@@ -201,7 +182,9 @@ async function downloadReport(outputFormat, button) {
     const { file } = await api.buildReport(outputFormat, collectHeaderFields());
     triggerDownload(api.reportUrl(currentDraft._id, file));
   } catch (error) {
-    setStatusMessage(`Ошибка: ${String(error.message).slice(0, 160)}`);
+    const message = `Ошибка: ${String(error.message).slice(0, 160)}`;
+    setStatusMessage(message);
+    showToast(message, { kind: "error", timeout: 6500 });
   } finally {
     button.textContent = originalLabel;
     setButtonsBusy(false);

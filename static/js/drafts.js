@@ -15,6 +15,7 @@ import {
 } from "./state.js";
 import { render, syncHeader, clearResumeCandidate } from "./render.js";
 import { showToast } from "./notifications.js";
+import { askText, confirmAction } from "./dialogs.js";
 
 export function openSidebar() {
   byId("sidebar").classList.add("open");
@@ -60,14 +61,16 @@ function draftCard(draft) {
   // noinspection JSDeprecatedSymbols
   return `
     <div class="draft-item ${draft.id === currentDraft._id ? "active" : ""}"
-         onclick="openDraft('${draft.id}')">
+         role="button" tabindex="0"
+         onclick="openDraft('${draft.id}')"
+         onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDraft('${draft.id}')}" >
       <div class="head">
         <div class="t">${escapeHtml(draft.title)}</div>
         <span class="badge ${badge.kind}">${escapeHtml(badge.label)}</span>
       </div>
       <div class="m">изм. ${formatUpdatedAt(draft.updated)} · ${draft.cases} кейс. · ${draft.bugs} баг.</div>
       <div class="acts">
-        <button onclick="event.stopPropagation();renameDraft('${draft.id}','${escapeHtml(draft.title)}')">переименовать</button>
+        <button onclick="event.stopPropagation();renameDraft('${draft.id}',decodeURIComponent('${encodeURIComponent(draft.title)}'))">переименовать</button>
         <button class="del" onclick="event.stopPropagation();deleteDraft('${draft.id}')">удалить</button>
       </div>
     </div>`;
@@ -161,7 +164,13 @@ export async function startNewDraft() {
 }
 
 export async function renameDraft(draftId, currentTitle) {
-  const title = prompt("Новое название:", currentTitle);
+  const title = await askText({
+    title: "Переименовать отчёт",
+    inputLabel: "Новое название",
+    value: currentTitle,
+    confirmLabel: "Сохранить",
+    required: true,
+  });
   if (title === null) return;
 
   await api.renameDraft(draftId, title);
@@ -173,7 +182,13 @@ export async function renameDraft(draftId, currentTitle) {
 }
 
 export async function deleteDraft(draftId) {
-  if (!confirm("Удалить этот черновик?")) return;
+  const confirmed = await confirmAction({
+    title: "Удалить отчёт?",
+    description: "Действие нельзя отменить.",
+    confirmLabel: "Удалить",
+    danger: true,
+  });
+  if (!confirmed) return;
 
   await api.deleteDraft(draftId);
   if (localStorage.getItem(LAST_DRAFT_STORAGE_KEY) === draftId) {
@@ -189,7 +204,13 @@ export async function deleteDraft(draftId) {
 
 /** Переименование черновика по клику на название в шапке. */
 export async function renameCurrentDraft(saveNow) {
-  const title = prompt("Название черновика:", currentDraft._title || "");
+  const title = await askText({
+    title: currentDraft._title ? "Переименовать отчёт" : "Создать отчёт",
+    inputLabel: currentDraft._title ? "Новое название" : "Название",
+    value: currentDraft._title || "",
+    confirmLabel: "Сохранить",
+    required: true,
+  });
   if (title === null) return;
 
   currentDraft._title = title;

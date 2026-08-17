@@ -43,7 +43,7 @@ export const getResumeCandidate = () => resumeCandidate;
  * Пункты добавляются кнопкой под последним полем, удаляются крестиком.
  * Крестик у единственного пункта скрыт — хотя бы одно поле остаётся всегда.
  */
-function renderListField(items, itemType, itemIndex, fieldName, addLabel) {
+export function renderListField(items, itemType, itemIndex, fieldName, addLabel) {
   const values = items && items.length ? items : [""];
   const single = values.length === 1;
 
@@ -59,7 +59,11 @@ function renderListField(items, itemType, itemIndex, fieldName, addLabel) {
     </div>`).join("");
 
   return `
-    <div class="list-field">
+    <div class="list-field"
+         data-item-type="${itemType}"
+         data-item-index="${itemIndex}"
+         data-field-name="${fieldName}"
+         data-add-label="${escapeHtml(addLabel)}">
       ${rows}
       <button class="list-add"
         onclick="addListItem('${itemType}',${itemIndex},'${fieldName}')">+ ${addLabel}</button>
@@ -87,10 +91,11 @@ function renderImageField(images, itemType, itemIndex, fieldName) {
     <div class="shot">
       <button class="x" onclick="removeImage('${itemType}',${itemIndex},'${fieldName}',${imageIndex})">×</button>
       <img src="${draftId ? api.imageUrl(draftId, image.file) : ""}" alt="">
-      <div class="cap ${image.caption ? "" : "empty"}"
-           onclick="editCaption('${itemType}',${itemIndex},'${fieldName}',${imageIndex})">
+      <button type="button" class="cap ${image.caption ? "" : "empty"}"
+           data-image-index="${imageIndex}"
+           onclick="event.stopPropagation(); editCaption('${itemType}',${itemIndex},'${fieldName}',${imageIndex})">
         ${image.caption ? escapeHtml(image.caption) : "+ подпись"}
-      </div>
+      </button>
     </div>`).join("");
 
   return `
@@ -140,7 +145,7 @@ function renderStatusSelect(itemType, itemIndex, currentStatus, options) {
 
 function renderTestCase(testCase, index) {
   return `
-  <div class="card">
+  <div class="card" data-item-type="case" data-item-index="${index}">
     <div class="card-head">
       <div class="idx">${index + 1}</div>
       <input class="title" id="title-case-${index}" placeholder="Название кейса"
@@ -174,10 +179,10 @@ function renderTestCase(testCase, index) {
 
 function renderBug(bug, index) {
   return `
-  <div class="card">
+  <div class="card" data-item-type="bug" data-item-index="${index}">
     <div class="card-head">
       <div class="idx">${index + 1}</div>
-      <input class="title" id="title-bug-${index}" placeholder="Заголовок бага"
+      <input class="title" id="title-bug-${index}" placeholder="Название бага"
              value="${escapeHtml(bug.title)}"
              oninput="updateField('bug',${index},'title',this.value); clearFieldError(this)">
       <button class="del" onclick="removeItem('bug',${index})">✕</button>
@@ -216,13 +221,30 @@ function renderResumeBar() {
   return `
     <div class="resume-bar">
       <span class="ic">🕘</span>
-      <span class="txt">Последний отчёт:
-        <span class="name">${escapeHtml(resumeCandidate._title || "без названия")}</span>
-        <span class="badge ${badge.kind}">${escapeHtml(badge.label)}</span>
-        · ${escapeHtml(formatDay(resumeCandidate.date))}
-        · ${caseCount} ${caseWord}</span>
+      <span class="txt">
+        <span class="resume-main">Последний отчёт:
+          <span class="name">${escapeHtml(resumeCandidate._title || "без названия")}</span>
+          <span class="badge ${badge.kind}">${escapeHtml(badge.label)}</span>
+        </span>
+        <span class="resume-meta"><span>${escapeHtml(formatDay(resumeCandidate.date))}</span><span>· ${caseCount} ${caseWord}</span></span>
+      </span>
       <button class="go" onclick="resumeLastDraft()">Продолжить</button>
       <button class="cls" onclick="dismissResumeBar()" title="Скрыть">✕</button>
+    </div>`;
+}
+
+export function renderItemCard(itemType, item, index) {
+  return itemType === "case" ? renderTestCase(item, index) : renderBug(item, index);
+}
+
+export function renderEmptyState(kind) {
+  const isCases = kind === "case";
+  return `
+    <div class="empty-state" role="status">
+      <div class="empty-title">${isCases ? "Нет тест-кейсов" : "Нет баг-репортов"}</div>
+      <div class="empty-copy">${isCases
+        ? "Добавьте первый кейс, чтобы начать формировать отчёт."
+        : "Добавьте баг, если во время тестирования обнаружена проблема."}</div>
     </div>`;
 }
 
@@ -235,13 +257,20 @@ export function onAfterRender(callback) {
 
 /** Перерисовывает обе вкладки и служебные элементы. */
 export function render() {
+  const casesContent = currentDraft.cases.length
+    ? currentDraft.cases.map(renderTestCase).join("")
+    : renderEmptyState("case");
+  const bugsContent = currentDraft.bugs.length
+    ? currentDraft.bugs.map(renderBug).join("")
+    : renderEmptyState("bug");
+
   byId("casesPane").innerHTML =
-    currentDraft.cases.map(renderTestCase).join("")
+    casesContent
     + `<button class="add-case" onclick="addItem('case')">+ Добавить кейс</button>`
     + renderResumeBar();
 
   byId("bugsPane").innerHTML =
-    currentDraft.bugs.map(renderBug).join("")
+    bugsContent
     + `<button class="add-case" onclick="addItem('bug')">+ Добавить баг</button>`;
 
   byId("cCount").textContent = currentDraft.cases.length;
@@ -272,6 +301,28 @@ function syncProjectSelect(value) {
   }
 
   select.value = value;
+
+  const dropdown = byId("projectDropdown");
+  dropdown?.querySelector(".project-option.legacy")?.remove();
+  const triggerLabel = dropdown?.querySelector(".project-label");
+  if (triggerLabel) triggerLabel.textContent = value || "—";
+
+  dropdown?.querySelectorAll(".project-option").forEach((option) => {
+    const selected = option.dataset.value === value;
+    option.classList.toggle("selected", selected);
+    option.setAttribute("aria-selected", String(selected));
+  });
+
+  if (value && !dropdown?.querySelector(`.project-option[data-value="${CSS.escape(value)}"]`)) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "project-option selected legacy";
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", "true");
+    option.dataset.value = value;
+    option.textContent = value;
+    byId("projectOptions")?.append(option);
+  }
 }
 
 /** Обновляет поля шапки под текущий черновик. */

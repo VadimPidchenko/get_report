@@ -28,6 +28,9 @@ import {
   clearResumeCandidate,
   getResumeCandidate,
   statusClass,
+  renderListField,
+  renderItemCard,
+  renderEmptyState,
 } from "./render.js";
 import {
   refreshDraftList,
@@ -51,12 +54,92 @@ import {
   refreshDownloadButtons,
   clearFieldError,
 } from "./reports.js";
+import { initDialogs } from "./dialogs.js";
 
 // ─── правки содержимого ───
 
 function updateField(itemType, itemIndex, fieldName, value) {
   itemsOf(itemType)[itemIndex][fieldName] = value;
   scheduleSave();
+}
+
+function closeProjectDropdown() {
+  const dropdown = byId("projectDropdown");
+  dropdown?.classList.remove("open");
+  byId("projectTrigger")?.setAttribute("aria-expanded", "false");
+}
+
+function openProjectDropdown() {
+  const dropdown = byId("projectDropdown");
+  if (!dropdown) return;
+  closeStatusDropdowns();
+  dropdown.classList.add("open");
+  byId("projectTrigger")?.setAttribute("aria-expanded", "true");
+}
+
+function chooseProject(value, { focusTrigger = true } = {}) {
+  const select = byId("project");
+  select.value = value;
+  select.dispatchEvent(new Event("input", { bubbles: true }));
+
+  const dropdown = byId("projectDropdown");
+  dropdown.querySelector(".project-label").textContent = value || "—";
+  dropdown.querySelectorAll(".project-option").forEach((option) => {
+    const selected = option.dataset.value === value;
+    option.classList.toggle("selected", selected);
+    option.setAttribute("aria-selected", String(selected));
+  });
+
+  clearFieldError(dropdown);
+  closeProjectDropdown();
+  if (focusTrigger) byId("projectTrigger")?.focus();
+}
+
+function initProjectDropdown() {
+  const trigger = byId("projectTrigger");
+  const dropdown = byId("projectDropdown");
+
+  trigger.onclick = (event) => {
+    event.stopPropagation();
+    if (dropdown.classList.contains("open")) closeProjectDropdown();
+    else openProjectDropdown();
+  };
+
+  byId("projectOptions").onclick = (event) => {
+    const option = event.target.closest(".project-option");
+    if (!option) return;
+    event.stopPropagation();
+    chooseProject(option.dataset.value);
+  };
+
+  trigger.onkeydown = (event) => {
+    if (!["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    openProjectDropdown();
+    const options = [...dropdown.querySelectorAll(".project-option:not([disabled])")];
+    const selected = dropdown.querySelector(".project-option.selected");
+    const index = Math.max(0, options.indexOf(selected));
+    const target = event.key === "ArrowUp" ? options[Math.max(0, index - 1)] : options[Math.min(options.length - 1, index + (event.key === "ArrowDown" ? 1 : 0))];
+    (target || selected || options[0])?.focus();
+  };
+
+  byId("projectOptions").onkeydown = (event) => {
+    const options = [...dropdown.querySelectorAll(".project-option:not([disabled])")];
+    const index = options.indexOf(document.activeElement);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      options[Math.max(0, Math.min(options.length - 1, index + delta))]?.focus();
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      const option = document.activeElement.closest?.(".project-option");
+      if (option) chooseProject(option.dataset.value);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeProjectDropdown();
+      trigger.focus();
+    }
+  };
 }
 
 function closeStatusDropdowns(except = null) {
@@ -67,13 +150,31 @@ function closeStatusDropdowns(except = null) {
   });
 }
 
+/** Выбирает направление меню статуса так, чтобы оно не попадало под sticky footer. */
+function positionStatusDropdown(dropdown) {
+  const trigger = dropdown.querySelector(".status-trigger");
+  const menu = dropdown.querySelector(".status-options");
+  if (!trigger || !menu) return;
+
+  dropdown.classList.remove("drop-up");
+  const triggerRect = trigger.getBoundingClientRect();
+  const footerTop = document.querySelector(".footbar")?.getBoundingClientRect().top ?? window.innerHeight;
+  const menuHeight = menu.scrollHeight;
+  const below = footerTop - triggerRect.bottom - 8;
+  const above = triggerRect.top - 8;
+
+  if (below < menuHeight && above > below) dropdown.classList.add("drop-up");
+}
+
 /** Открывает меню статуса и закрывает другое открытое меню. */
 function toggleStatusDropdown(dropdown, event) {
   event.stopPropagation();
+  closeProjectDropdown();
   const willOpen = !dropdown.classList.contains("open");
   closeStatusDropdowns(dropdown);
   dropdown.classList.toggle("open", willOpen);
   dropdown.querySelector(".status-trigger")?.setAttribute("aria-expanded", String(willOpen));
+  if (willOpen) positionStatusDropdown(dropdown);
 }
 
 /** Выбирает статус, закрывает меню и снимает мышиный фокус с поля. */
@@ -82,7 +183,8 @@ function chooseStatus(itemType, itemIndex, status, option, event) {
   updateField(itemType, itemIndex, "status", status);
 
   const dropdown = option.closest(".status-dropdown");
-  dropdown.className = `status-dropdown status-${statusClass(status)}`;
+  dropdown.classList.remove("open", "status-none", "status-passed", "status-done", "status-failed", "status-blocked", "status-in-progress", "status-skipped", "status-to-do", "status-backlog");
+  dropdown.classList.add(`status-${statusClass(status)}`);
   dropdown.querySelector(".status-label").textContent = status || "Не выбран";
   dropdown.querySelector(".status-trigger").setAttribute("aria-expanded", "false");
   dropdown.querySelectorAll(".status-option").forEach((item) => {
@@ -92,15 +194,56 @@ function chooseStatus(itemType, itemIndex, status, option, event) {
   });
 
   clearFieldError(dropdown);
-  option.blur();
+  dropdown.querySelector(".status-trigger")?.focus();
 }
 
 function initStatusDropdowns() {
-  document.addEventListener("click", () => closeStatusDropdowns());
+  document.addEventListener("click", () => {
+    closeStatusDropdowns();
+    closeProjectDropdown();
+  });
+
+  // Открытый popover не должен висеть поверх footer при прокрутке/изменении viewport.
+  window.addEventListener("scroll", () => closeStatusDropdowns(), { passive: true });
+  window.addEventListener("resize", () => closeStatusDropdowns(), { passive: true });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    closeStatusDropdowns();
-    document.activeElement?.blur();
+    const openStatus = document.querySelector(".status-dropdown.open");
+    const openProject = byId("projectDropdown")?.classList.contains("open");
+    if (openStatus) {
+      closeStatusDropdowns();
+      openStatus.querySelector(".status-trigger")?.focus();
+    }
+    if (openProject) {
+      closeProjectDropdown();
+      byId("projectTrigger")?.focus();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const trigger = event.target.closest?.(".status-trigger");
+    const option = event.target.closest?.(".status-option");
+    const dropdown = event.target.closest?.(".status-dropdown");
+    if (!dropdown || (!trigger && !option)) return;
+
+    const options = [...dropdown.querySelectorAll(".status-option")];
+    if (trigger && ["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
+      event.preventDefault();
+      closeProjectDropdown();
+      dropdown.classList.add("open");
+      trigger.setAttribute("aria-expanded", "true");
+      positionStatusDropdown(dropdown);
+      const selected = dropdown.querySelector(".status-option.selected");
+      (selected || options[0])?.focus();
+      return;
+    }
+
+    if (option && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      const index = options.indexOf(option);
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      options[Math.max(0, Math.min(options.length - 1, index + delta))]?.focus();
+    }
   });
 }
 
@@ -109,9 +252,30 @@ function updateListItem(itemType, itemIndex, fieldName, pointIndex, value) {
   scheduleSave();
 }
 
+function rerenderListField(itemType, itemIndex, fieldName) {
+  const selector = `.list-field[data-item-type="${itemType}"][data-item-index="${itemIndex}"][data-field-name="${fieldName}"]`;
+  const field = document.querySelector(selector);
+  if (!field) {
+    // На случай рассинхронизации DOM безопасно откатываемся к полной перерисовке.
+    render();
+    return;
+  }
+
+  const addLabel = field.dataset.addLabel || "Добавить пункт";
+  field.outerHTML = renderListField(
+    itemsOf(itemType)[itemIndex][fieldName],
+    itemType,
+    itemIndex,
+    fieldName,
+    addLabel,
+  );
+}
+
 function addListItem(itemType, itemIndex, fieldName) {
   itemsOf(itemType)[itemIndex][fieldName].push("");
-  render();
+  // Обновляем только конкретный список. Полная render() пересоздавала <img>
+  // в карточке, из-за чего превью заметно мигали при добавлении обычного шага.
+  rerenderListField(itemType, itemIndex, fieldName);
   // фокус в только что добавленное поле — печатать можно сразу
   focusLastListItem(itemType, itemIndex, fieldName);
   scheduleSave();
@@ -121,7 +285,7 @@ function removeListItem(itemType, itemIndex, fieldName, pointIndex) {
   const list = itemsOf(itemType)[itemIndex][fieldName];
   list.splice(pointIndex, 1);
   if (!list.length) list.push("");   // хотя бы один пункт всегда остаётся
-  render();
+  rerenderListField(itemType, itemIndex, fieldName);
   scheduleSave();
 }
 
@@ -135,16 +299,102 @@ function focusLastListItem(itemType, itemIndex, fieldName) {
   lastTextarea?.focus();
 }
 
+function paneFor(itemType) {
+  return byId(itemType === "case" ? "casesPane" : "bugsPane");
+}
+
+function updateItemCount(itemType) {
+  const counter = byId(itemType === "case" ? "cCount" : "bCount");
+  if (counter) counter.textContent = itemsOf(itemType).length;
+}
+
+/**
+ * После удаления карточки данные следующих элементов сдвигаются на один индекс.
+ * Сами DOM-узлы оставляем на месте (особенно <img>), меняем только индексы в
+ * id/data/inline-handlers. Так превью не пересоздаются и не мигают.
+ */
+function reindexItemCard(card, itemType, oldIndex, newIndex) {
+  if (oldIndex === newIndex) return;
+
+  card.dataset.itemIndex = String(newIndex);
+  const badge = card.querySelector(".card-head .idx");
+  if (badge) badge.textContent = String(newIndex + 1);
+
+  const nodes = [card, ...card.querySelectorAll("*")];
+  for (const node of nodes) {
+    for (const attr of [...node.attributes]) {
+      let value = attr.value;
+      const updated = value
+        .replaceAll(`'${itemType}',${oldIndex},`, `'${itemType}',${newIndex},`)
+        .replaceAll(`'${itemType}',${oldIndex})`, `'${itemType}',${newIndex})`)
+        .replaceAll(`-${itemType}-${oldIndex}-`, `-${itemType}-${newIndex}-`)
+        .replaceAll(`title-${itemType}-${oldIndex}`, `title-${itemType}-${newIndex}`)
+        .replaceAll(`status-${itemType}-${oldIndex}`, `status-${itemType}-${newIndex}`);
+
+      if (updated !== value) node.setAttribute(attr.name, updated);
+    }
+
+    if (node.dataset?.itemIndex === String(oldIndex)) node.dataset.itemIndex = String(newIndex);
+    if (node.dataset?.i === String(oldIndex)) node.dataset.i = String(newIndex);
+  }
+}
+
 function addItem(itemType) {
-  itemsOf(itemType).push(itemType === "case" ? createTestCase() : createBug());
+  const list = itemsOf(itemType);
+  const item = itemType === "case" ? createTestCase() : createBug();
+  const itemIndex = list.length;
+  list.push(item);
   clearResumeCandidate();
-  render();
+
+  const pane = paneFor(itemType);
+  const addButton = pane?.querySelector(".add-case");
+  pane?.querySelector(".empty-state")?.remove();
+  pane?.querySelector(".resume-bar")?.remove();
+
+  if (pane && addButton) {
+    addButton.insertAdjacentHTML("beforebegin", renderItemCard(itemType, item, itemIndex));
+  } else {
+    // Аварийный fallback оставляем только для реально рассинхронизированного DOM.
+    render();
+  }
+
+  updateItemCount(itemType);
+  refreshDownloadButtons();
   scheduleSave();
 }
 
 function removeItem(itemType, itemIndex) {
-  itemsOf(itemType).splice(itemIndex, 1);
-  render();
+  const list = itemsOf(itemType);
+  list.splice(itemIndex, 1);
+
+  const pane = paneFor(itemType);
+  const target = pane?.querySelector(`.card[data-item-type="${itemType}"][data-item-index="${itemIndex}"]`);
+
+  if (!pane || !target) {
+    render();
+    scheduleSave();
+    return;
+  }
+
+  target.remove();
+
+  // Не перерисовываем оставшиеся карточки: только перенумеровываем их ссылки на state.
+  const following = [...pane.querySelectorAll(`.card[data-item-type="${itemType}"]`)]
+    .filter((card) => Number(card.dataset.itemIndex) > itemIndex)
+    .sort((a, b) => Number(a.dataset.itemIndex) - Number(b.dataset.itemIndex));
+
+  following.forEach((card) => {
+    const oldIndex = Number(card.dataset.itemIndex);
+    reindexItemCard(card, itemType, oldIndex, oldIndex - 1);
+  });
+
+  if (!list.length) {
+    const addButton = pane.querySelector(".add-case");
+    addButton?.insertAdjacentHTML("beforebegin", renderEmptyState(itemType));
+  }
+
+  updateItemCount(itemType);
+  refreshDownloadButtons();
   scheduleSave();
 }
 
@@ -199,7 +449,9 @@ const ACTIVE_TAB_STORAGE_KEY = "activeTab";
 /** Показывает нужную вкладку и запоминает выбор до конца сессии. */
 function activateTab(tabName) {
   document.querySelectorAll(".tab").forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.tab === tabName);
+    const active = tab.dataset.tab === tabName;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
   });
 
   const isCasesTab = tabName === "cases";
@@ -314,6 +566,8 @@ async function init() {
   exposeInlineHandlers();
   initTabs();
   initHeaderFields();
+  initProjectDropdown();
+  initDialogs();
   initSidebar();
   initAutoGrow();
   initStatusDropdowns();

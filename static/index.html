@@ -10,7 +10,7 @@
 
 <!-- боковая панель со списком черновиков -->
 <div class="backdrop" id="backdrop"></div>
-<aside class="sidebar" id="sidebar">
+<aside class="sidebar" id="sidebar" aria-label="Сохранённые отчёты">
   <h2>Отчёты <span class="count" id="draftCount"></span></h2>
   <div class="draft-list" id="draftList"></div>
   <button class="newbtn" id="newDraftBtn">+ Новый отчёт</button>
@@ -18,49 +18,86 @@
 
 <header>
   <div class="head-left">
-    <button class="burger" id="burger" title="Отчёты">☰</button>
+    <button class="burger" id="burger" title="Отчёты" aria-label="Открыть отчёты">☰</button>
     <span class="draft-name" id="draftName" title="Кликните, чтобы переименовать">—</span>
-    <span class="autosave" id="autosave"></span>
+    <span class="autosave" id="autosave" aria-live="polite"></span>
   </div>
 
-  <div class="tabs">
-    <div class="tab active" data-tab="cases">Тест-кейсы <span class="count" id="cCount">0</span></div>
-    <div class="tab" data-tab="bugs">Баг-репорты <span class="count" id="bCount">0</span></div>
+  <div class="tabs" role="tablist" aria-label="Тип данных отчёта">
+    <button class="tab active" type="button" role="tab" aria-selected="true" data-tab="cases">
+      Тест-кейсы <span class="count" id="cCount">0</span>
+    </button>
+    <button class="tab" type="button" role="tab" aria-selected="false" data-tab="bugs">
+      Баг-репорты <span class="count" id="bCount">0</span>
+    </button>
   </div>
 
   <div class="meta">
-    <label class="meta-field">
+    <div class="meta-field project-field">
       <span>Проект</span>
-      <select id="project" style="width:120px" onchange="clearFieldError(this)">
-        <option value="" disabled selected>—</option>
+      <div class="project-dropdown" id="projectDropdown">
+        <button type="button" class="project-trigger" id="projectTrigger"
+                aria-haspopup="listbox" aria-expanded="false">
+          <span class="project-label">—</span>
+          <span class="dropdown-arrow"></span>
+        </button>
+        <div class="project-options" id="projectOptions" role="listbox" aria-label="Проект">
+          <button type="button" class="project-option selected" role="option" aria-selected="true" data-value="">—</button>
+          <button type="button" class="project-option" role="option" aria-selected="false" data-value="a7.ru">a7.ru</button>
+          <button type="button" class="project-option" role="option" aria-selected="false" data-value="finmart">finmart</button>
+        </div>
+      </div>
+      <!-- Нативный select остаётся источником значения для существующей логики состояния/API. -->
+      <select id="project" class="native-project-select" tabindex="-1" aria-hidden="true">
+        <option value="" selected>—</option>
         <option value="a7.ru">a7.ru</option>
         <option value="finmart">finmart</option>
       </select>
-    </label>
+    </div>
     <label class="meta-field">
       <span>Дата</span>
-      <input id="date" style="width:110px">
+      <input id="date" class="meta-date">
     </label>
     <label class="meta-field">
       <span>Таск-трекер</span>
-      <input id="jira" style="width:220px">
+      <input id="jira" class="meta-jira">
     </label>
   </div>
 </header>
 
-<div class="wrap">
+<main class="wrap">
   <div id="casesPane"></div>
   <div id="bugsPane" style="display:none"></div>
-</div>
+</main>
 
 <div class="footbar">
   <button class="btn big" id="dlDocx">Скачать DOCX</button>
   <button class="btn big" id="dlPdf">Скачать PDF</button>
-  <span class="status" id="statusMsg"></span>
+  <span class="status" id="statusMsg" aria-live="polite"></span>
 </div>
 
 <!-- всплывающие уведомления -->
-<div class="toasts" id="toasts"></div>
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<!-- единый слой диалогов вместо browser prompt/confirm -->
+<div class="dialog-layer" id="dialogLayer" aria-hidden="true">
+  <div class="dialog-backdrop" data-dialog-cancel></div>
+  <section class="dialog" id="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+    <div class="dialog-copy">
+      <h3 id="dialogTitle"></h3>
+      <p id="dialogDescription"></p>
+    </div>
+    <div class="dialog-field" id="dialogField">
+      <label for="dialogInput" id="dialogInputLabel">Название</label>
+      <input id="dialogInput" type="text" autocomplete="off">
+      <div class="dialog-error" id="dialogError" aria-live="polite"></div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn secondary" id="dialogCancel">Отмена</button>
+      <button type="button" class="btn" id="dialogConfirm">Сохранить</button>
+    </div>
+  </section>
+</div>
 
 <!-- выбор файлов для загрузки картинок -->
 <input type="file" id="fileInput" accept="image/png,image/jpeg" hidden multiple>
