@@ -20,11 +20,19 @@ from pathlib import Path
 from app.config import (
     GENERATOR_SCRIPT,
     GENERATOR_TIMEOUT_SECONDS,
-    IMAGES_DIR,
     REPORT_DOCX_NAME,
     REPORT_HASH_NAME,
     REPORT_PDF_NAME,
-    REPORTS_DIR,
+)
+from app.storage.files import (
+    ensure_directory,
+    remove_file_if_exists,
+    write_text_atomic,
+)
+from app.storage.paths import (
+    draft_images_path,
+    draft_reports_path,
+    report_file_path,
 )
 
 
@@ -38,15 +46,9 @@ class ReportResult:
     from_cache: bool
 
 
-def reports_dir(draft_id: str) -> Path:
-    """Папка отчётов черновика, создаётся при первом обращении."""
-    folder = REPORTS_DIR / draft_id
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder
-
-
 def report_path(draft_id: str, filename: str) -> Path:
-    return REPORTS_DIR / draft_id / filename
+    """Возвращает путь к отчёту, не создавая каталогов."""
+    return report_file_path(draft_id, filename)
 
 
 def content_hash(draft: dict) -> str:
@@ -60,8 +62,7 @@ def content_hash(draft: dict) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def _read_stored_hash(folder: Path) -> str | None:
-    hash_file = folder / REPORT_HASH_NAME
+def _read_stored_hash(hash_file: Path) -> str | None:
     if not hash_file.exists():
         return None
     return hash_file.read_text(encoding="utf-8").strip()
@@ -90,12 +91,11 @@ def _run_generator(draft: dict, draft_id: str, output_dir: Path, mode: str) -> N
         "node",
         str(GENERATOR_SCRIPT),
         data_file or os.devnull,
-        str(IMAGES_DIR / draft_id),
+        str(draft_images_path(draft_id)),
         str(output_dir),
         mode,
     ]
 
-    process = None
     try:
         process = subprocess.run(
             command,
@@ -125,19 +125,19 @@ def build_report(draft: dict, output_format: str) -> ReportResult:
     из кеша. При изменениях устаревшие файлы удаляются.
     """
     draft_id = draft.get("_id") or "unsaved"
-    folder = reports_dir(draft_id)
+    folder = ensure_directory(draft_reports_path(draft_id))
 
-    docx_file = folder / REPORT_DOCX_NAME
-    pdf_file = folder / REPORT_PDF_NAME
+    docx_file = report_file_path(draft_id, REPORT_DOCX_NAME)
+    pdf_file = report_file_path(draft_id, REPORT_PDF_NAME)
+    hash_file = report_file_path(draft_id, REPORT_HASH_NAME)
     requested_file = docx_file if output_format == "docx" else pdf_file
 
     current_hash = content_hash(draft)
-    is_fresh = _read_stored_hash(folder) == current_hash
+    is_fresh = _read_stored_hash(hash_file) == current_hash
 
     if not is_fresh:
         for stale_file in (docx_file, pdf_file):
-            if stale_file.exists():
-                stale_file.unlink()
+            remove_file_if_exists(stale_file)
 
     if is_fresh and requested_file.exists():
         return ReportResult(filename=requested_file.name, from_cache=True)
@@ -148,5 +148,5 @@ def build_report(draft: dict, output_format: str) -> ReportResult:
     if not requested_file.exists():
         raise GeneratorError("Генератор отработал, но файл не появился")
 
-    (folder / REPORT_HASH_NAME).write_text(current_hash, encoding="utf-8")
+    write_text_atomic(hash_file, current_hash)
     return ReportResult(filename=requested_file.name, from_cache=False)
