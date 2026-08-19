@@ -130,14 +130,20 @@ function openDialog(options) {
   layer().classList.add("open");
   layer().setAttribute("aria-hidden", "false");
 
+  // Фокус ставим после того, как dialog уже попал в layout и начал открываться.
+  // Два rAF делают поведение стабильным и при анимации модалки: для текстового
+  // диалога курсор сразу в поле, а текущее значение выделено для быстрой замены.
   requestAnimationFrame(() => {
-    if (options.input !== false) {
-      const input = byId("dialogInput");
-      input.focus();
-      input.select();
-    } else {
-      byId("dialogCancel").focus();
-    }
+    requestAnimationFrame(() => {
+      if (options.input !== false) {
+        const input = byId("dialogInput");
+        input.focus({ preventScroll: true });
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+      } else {
+        byId("dialogCancel").focus({ preventScroll: true });
+      }
+    });
   });
 
   return new Promise((resolve) => { activeResolve = resolve; });

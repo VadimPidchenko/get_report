@@ -55,7 +55,7 @@ export function renderListField(items, itemType, itemIndex, fieldName, addLabel)
       >${escapeHtml(value)}</textarea>
       <button class="list-del ${single ? "hidden" : ""}"
         onclick="removeListItem('${itemType}',${itemIndex},'${fieldName}',${pointIndex})"
-        title="Удалить">✕</button>
+        aria-label="Удалить пункт" title="Удалить пункт"><span aria-hidden="true">×</span></button>
     </div>`).join("");
 
   return `
@@ -148,10 +148,10 @@ function renderTestCase(testCase, index) {
   <div class="card" data-item-type="case" data-item-index="${index}">
     <div class="card-head">
       <div class="idx">${index + 1}</div>
-      <input class="title" id="title-case-${index}" placeholder="Название кейса"
+      <input class="title" id="title-case-${index}" placeholder="Название кейса" autocomplete="off"
              value="${escapeHtml(testCase.name)}"
              oninput="updateField('case',${index},'name',this.value); clearFieldError(this)">
-      <button class="del" onclick="removeItem('case',${index})" title="Удалить">✕</button>
+      <button class="del" onclick="removeItem('case',${index})" aria-label="Удалить кейс" title="Удалить кейс"><span aria-hidden="true">×</span></button>
     </div>
 
     ${renderListRow(testCase.tasks, "case", index, "tasks", "Задачи", "Добавить задачу")}
@@ -182,10 +182,10 @@ function renderBug(bug, index) {
   <div class="card" data-item-type="bug" data-item-index="${index}">
     <div class="card-head">
       <div class="idx">${index + 1}</div>
-      <input class="title" id="title-bug-${index}" placeholder="Название бага"
+      <input class="title" id="title-bug-${index}" placeholder="Название бага" autocomplete="off"
              value="${escapeHtml(bug.title)}"
              oninput="updateField('bug',${index},'title',this.value); clearFieldError(this)">
-      <button class="del" onclick="removeItem('bug',${index})">✕</button>
+      <button class="del" onclick="removeItem('bug',${index})" aria-label="Удалить баг" title="Удалить баг"><span aria-hidden="true">×</span></button>
     </div>
 
     ${renderListRow(bug.tasks, "bug", index, "tasks", "Задачи", "Добавить задачу")}
@@ -220,16 +220,24 @@ function renderResumeBar() {
 
   return `
     <div class="resume-bar">
-      <span class="ic">🕘</span>
+      <span class="ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <circle cx="12" cy="12" r="8.25"></circle>
+          <path d="M12 7.5v5l3.25 2"></path>
+        </svg>
+      </span>
       <span class="txt">
-        <span class="resume-main">Последний отчёт:
+        <span class="resume-label">Последний открытый отчёт</span>
+        <span class="resume-main">
           <span class="name">${escapeHtml(resumeCandidate._title || "без названия")}</span>
           <span class="badge ${badge.kind}">${escapeHtml(badge.label)}</span>
         </span>
         <span class="resume-meta"><span>${escapeHtml(formatDay(resumeCandidate.date))}</span><span>· ${caseCount} ${caseWord}</span></span>
       </span>
-      <button class="go" onclick="resumeLastDraft()">Продолжить</button>
-      <button class="cls" onclick="dismissResumeBar()" title="Скрыть">✕</button>
+      <span class="resume-actions">
+        <button class="go" onclick="resumeLastDraft()">Продолжить</button>
+        <button class="cls" onclick="dismissResumeBar()" title="Скрыть" aria-label="Скрыть предложение продолжить отчёт">✕</button>
+      </span>
     </div>`;
 }
 

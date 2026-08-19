@@ -40,6 +40,8 @@ import {
   startNewDraft,
   renameDraft,
   deleteDraft,
+  toggleDraftMenu,
+  closeDraftMenus,
   renameCurrentDraft,
 } from "./drafts.js";
 import {
@@ -172,9 +174,11 @@ function toggleStatusDropdown(dropdown, event) {
   closeProjectDropdown();
   const willOpen = !dropdown.classList.contains("open");
   closeStatusDropdowns(dropdown);
+  // Направление вычисляем ДО показа меню. Иначе при первом открытии меню успевает
+  // отрисоваться снизу и в следующий кадр перепрыгнуть наверх, что выглядит как рывок карточки.
+  if (willOpen) positionStatusDropdown(dropdown);
   dropdown.classList.toggle("open", willOpen);
   dropdown.querySelector(".status-trigger")?.setAttribute("aria-expanded", String(willOpen));
-  if (willOpen) positionStatusDropdown(dropdown);
 }
 
 /** Выбирает статус, закрывает меню и снимает мышиный фокус с поля. */
@@ -201,6 +205,7 @@ function initStatusDropdowns() {
   document.addEventListener("click", () => {
     closeStatusDropdowns();
     closeProjectDropdown();
+    closeDraftMenus();
   });
 
   // Открытый popover не должен висеть поверх footer при прокрутке/изменении viewport.
@@ -210,6 +215,7 @@ function initStatusDropdowns() {
     if (event.key !== "Escape") return;
     const openStatus = document.querySelector(".status-dropdown.open");
     const openProject = byId("projectDropdown")?.classList.contains("open");
+    const openDraftMenu = document.querySelector(".draft-menu.open");
     if (openStatus) {
       closeStatusDropdowns();
       openStatus.querySelector(".status-trigger")?.focus();
@@ -217,6 +223,11 @@ function initStatusDropdowns() {
     if (openProject) {
       closeProjectDropdown();
       byId("projectTrigger")?.focus();
+    }
+    if (openDraftMenu) {
+      const trigger = openDraftMenu.closest(".draft-item")?.querySelector(".draft-menu-trigger");
+      closeDraftMenus();
+      trigger?.focus();
     }
   });
 
@@ -230,9 +241,9 @@ function initStatusDropdowns() {
     if (trigger && ["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
       event.preventDefault();
       closeProjectDropdown();
+      positionStatusDropdown(dropdown);
       dropdown.classList.add("open");
       trigger.setAttribute("aria-expanded", "true");
-      positionStatusDropdown(dropdown);
       const selected = dropdown.querySelector(".status-option.selected");
       (selected || options[0])?.focus();
       return;
@@ -276,17 +287,143 @@ function addListItem(itemType, itemIndex, fieldName) {
   // Обновляем только конкретный список. Полная render() пересоздавала <img>
   // в карточке, из-за чего превью заметно мигали при добавлении обычного шага.
   rerenderListField(itemType, itemIndex, fieldName);
+  animateLastListItem(itemType, itemIndex, fieldName);
   // фокус в только что добавленное поле — печатать можно сразу
   focusLastListItem(itemType, itemIndex, fieldName);
   scheduleSave();
 }
 
+const prefersReducedMotion = () =>
+  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+/**
+ * Height-aware motion for a single task/step/precondition row.
+ * We measure the real row height, so multi-line values collapse without jumps.
+ */
+function animateListRow(row, direction = "in") {
+  if (!row || prefersReducedMotion() || typeof row.animate !== "function") {
+    return Promise.resolve();
+  }
+
+  const height = row.getBoundingClientRect().height;
+  const entering = direction === "in";
+  row.classList.add("motion-running");
+
+  if (entering) {
+    // Появление делим на две фазы.
+    // 1) Сначала список освобождает место под новую строку. Сам input в этот
+    //    момент полностью прозрачен, поэтому его border не «вырастает» из-под
+    //    предыдущего поля.
+    // 2) Когда почти вся высота уже раскрыта, готовая строка коротко проявляется.
+    const layoutAnimation = row.animate(
+      [
+        { height: "0px", marginTop: "-8px" },
+        { height: `${height}px`, marginTop: "0px" },
+      ],
+      {
+        duration: 150,
+        easing: "cubic-bezier(.2, .75, .25, 1)",
+        fill: "both",
+      },
+    );
+
+    const revealAnimation = row.animate(
+      [
+        { opacity: 0, transform: "translateY(-3px)" },
+        { opacity: 1, transform: "translateY(0)" },
+      ],
+      {
+        duration: 130,
+        delay: 95,
+        easing: "cubic-bezier(.2, .75, .25, 1)",
+        fill: "both",
+      },
+    );
+
+    return Promise.all([
+      layoutAnimation.finished.catch(() => {}),
+      revealAnimation.finished.catch(() => {}),
+    ]).finally(() => {
+      layoutAnimation.cancel();
+      revealAnimation.cancel();
+      row.classList.remove("motion-running");
+    });
+  }
+
+  // Удаление — зеркальная пара к появлению.
+  // Сначала готовая строка быстро и спокойно исчезает целиком (вместе с border),
+  // затем освободившееся место схлопывается. Благодаря этому рамка input не
+  // «складывается» на глазах и движение выглядит как обратная версия enter.
+  const hideAnimation = row.animate(
+    [
+      { opacity: 1, transform: "translateY(0)" },
+      { opacity: 0, transform: "translateY(-3px)" },
+    ],
+    {
+      duration: 130,
+      easing: "cubic-bezier(.2, .75, .25, 1)",
+      fill: "both",
+    },
+  );
+
+  const layoutAnimation = row.animate(
+    [
+      { height: `${height}px`, marginTop: "0px" },
+      { height: "0px", marginTop: "-8px" },
+    ],
+    {
+      duration: 150,
+      delay: 95,
+      easing: "cubic-bezier(.2, .75, .25, 1)",
+      fill: "both",
+    },
+  );
+
+  return Promise.all([
+    hideAnimation.finished.catch(() => {}),
+    layoutAnimation.finished.catch(() => {}),
+  ]).finally(() => {
+    hideAnimation.cancel();
+    layoutAnimation.cancel();
+    row.classList.remove("motion-running");
+  });
+}
+
 function removeListItem(itemType, itemIndex, fieldName, pointIndex) {
   const list = itemsOf(itemType)[itemIndex][fieldName];
-  list.splice(pointIndex, 1);
-  if (!list.length) list.push("");   // хотя бы один пункт всегда остаётся
-  rerenderListField(itemType, itemIndex, fieldName);
-  scheduleSave();
+  const selector = `.list-field[data-item-type="${itemType}"][data-item-index="${itemIndex}"][data-field-name="${fieldName}"]`;
+  const field = document.querySelector(selector);
+  const target = field?.querySelectorAll(".list-item")[pointIndex];
+
+  // During the short collapse keep DOM indexes stable, otherwise typing/clicking
+  // another row could target the state index that is about to move.
+  if (field?.dataset.removing === "true") return;
+  if (field) {
+    field.dataset.removing = "true";
+    field.style.pointerEvents = "none";
+  }
+
+  const finish = () => {
+    list.splice(pointIndex, 1);
+    if (!list.length) list.push("");   // хотя бы один пункт всегда остаётся
+    rerenderListField(itemType, itemIndex, fieldName);
+    scheduleSave();
+  };
+
+  if (!target) {
+    finish();
+    return;
+  }
+
+  animateListRow(target, "out").then(finish);
+}
+
+/** Мягко показывает только что добавленный пункт списка. */
+function animateLastListItem(itemType, itemIndex, fieldName) {
+  const selector = `.list-field[data-item-type="${itemType}"][data-item-index="${itemIndex}"][data-field-name="${fieldName}"]`;
+  const lastItem = document.querySelector(`${selector} .list-item:last-of-type`);
+  if (!lastItem) return;
+  animateListRow(lastItem, "in");
 }
 
 /** Ставит курсор в последнее поле списка после его добавления. */
@@ -339,6 +476,57 @@ function reindexItemCard(card, itemType, oldIndex, newIndex) {
   }
 }
 
+/**
+ * Smoothly expands/collapses a whole case or bug card using its measured size.
+ * Padding, borders and bottom spacing participate in the animation, so nearby
+ * cards move continuously instead of jumping after the fade.
+ */
+function animateItemCard(card, direction = "in") {
+  if (!card || prefersReducedMotion() || typeof card.animate !== "function") {
+    return Promise.resolve();
+  }
+
+  const styles = getComputedStyle(card);
+  const expanded = {
+    height: `${card.getBoundingClientRect().height}px`,
+    marginBottom: styles.marginBottom,
+    paddingTop: styles.paddingTop,
+    paddingBottom: styles.paddingBottom,
+    borderTopWidth: styles.borderTopWidth,
+    borderBottomWidth: styles.borderBottomWidth,
+    opacity: 1,
+    transform: "translateY(0) scale(.999)",
+  };
+  const collapsed = {
+    height: "0px",
+    marginBottom: "0px",
+    paddingTop: "0px",
+    paddingBottom: "0px",
+    borderTopWidth: "0px",
+    borderBottomWidth: "0px",
+    opacity: 0,
+    transform: "translateY(-7px) scale(.992)",
+  };
+  const entering = direction === "in";
+
+  card.classList.add("motion-running");
+  card.style.pointerEvents = entering ? "" : "none";
+  const animation = card.animate(
+    entering ? [collapsed, expanded] : [expanded, collapsed],
+    {
+      duration: entering ? 280 : 250,
+      easing: entering ? "cubic-bezier(.16, 1, .3, 1)" : "cubic-bezier(.4, 0, .2, 1)",
+      fill: "both",
+    },
+  );
+
+  return animation.finished.catch(() => {}).finally(() => {
+    animation.cancel();
+    card.classList.remove("motion-running");
+    card.style.pointerEvents = "";
+  });
+}
+
 function addItem(itemType) {
   const list = itemsOf(itemType);
   const item = itemType === "case" ? createTestCase() : createBug();
@@ -353,6 +541,8 @@ function addItem(itemType) {
 
   if (pane && addButton) {
     addButton.insertAdjacentHTML("beforebegin", renderItemCard(itemType, item, itemIndex));
+    const card = pane.querySelector(`.card[data-item-type="${itemType}"][data-item-index="${itemIndex}"]`);
+    animateItemCard(card, "in");
   } else {
     // Аварийный fallback оставляем только для реально рассинхронизированного DOM.
     render();
@@ -365,37 +555,45 @@ function addItem(itemType) {
 
 function removeItem(itemType, itemIndex) {
   const list = itemsOf(itemType);
-  list.splice(itemIndex, 1);
-
+  const item = list[itemIndex];
   const pane = paneFor(itemType);
   const target = pane?.querySelector(`.card[data-item-type="${itemType}"][data-item-index="${itemIndex}"]`);
 
-  if (!pane || !target) {
+  if (!pane || !target || !item) {
+    if (itemIndex >= 0 && itemIndex < list.length) list.splice(itemIndex, 1);
     render();
     scheduleSave();
     return;
   }
 
-  target.remove();
+  animateItemCard(target, "out").then(() => {
+    // Find by object reference: another card may have completed its own short
+    // removal animation first and shifted numeric indexes in the meantime.
+    const currentIndex = list.indexOf(item);
+    if (currentIndex < 0) return;
 
-  // Не перерисовываем оставшиеся карточки: только перенумеровываем их ссылки на state.
-  const following = [...pane.querySelectorAll(`.card[data-item-type="${itemType}"]`)]
-    .filter((card) => Number(card.dataset.itemIndex) > itemIndex)
-    .sort((a, b) => Number(a.dataset.itemIndex) - Number(b.dataset.itemIndex));
+    list.splice(currentIndex, 1);
+    target.remove();
 
-  following.forEach((card) => {
-    const oldIndex = Number(card.dataset.itemIndex);
-    reindexItemCard(card, itemType, oldIndex, oldIndex - 1);
+    // Не перерисовываем оставшиеся карточки: только перенумеровываем их ссылки на state.
+    const following = [...pane.querySelectorAll(`.card[data-item-type="${itemType}"]`)]
+      .filter((card) => Number(card.dataset.itemIndex) > currentIndex)
+      .sort((a, b) => Number(a.dataset.itemIndex) - Number(b.dataset.itemIndex));
+
+    following.forEach((card) => {
+      const oldIndex = Number(card.dataset.itemIndex);
+      reindexItemCard(card, itemType, oldIndex, oldIndex - 1);
+    });
+
+    if (!list.length) {
+      const addButton = pane.querySelector(".add-case");
+      addButton?.insertAdjacentHTML("beforebegin", renderEmptyState(itemType));
+    }
+
+    updateItemCount(itemType);
+    refreshDownloadButtons();
+    scheduleSave();
   });
-
-  if (!list.length) {
-    const addButton = pane.querySelector(".add-case");
-    addButton?.insertAdjacentHTML("beforebegin", renderEmptyState(itemType));
-  }
-
-  updateItemCount(itemType);
-  refreshDownloadButtons();
-  scheduleSave();
 }
 
 // ─── восстановление прошлой работы ───
@@ -434,6 +632,7 @@ function exposeInlineHandlers() {
     openDraft,
     renameDraft,
     deleteDraft,
+    toggleDraftMenu,
     resumeLastDraft,
     dismissResumeBar,
     updateListItem,

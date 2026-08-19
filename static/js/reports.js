@@ -10,7 +10,9 @@ import { currentDraft, collectHeaderFields, saveNow } from "./state.js";
 import { setStatusMessage, showToast } from "./notifications.js";
 
 const VALIDATION_MESSAGE_TIMEOUT_MS = 4500;
-const SCROLL_FOCUS_DELAY_MS = 300;
+const SCROLL_FOCUS_DELAY_MS = 360;
+const TITLE_ERROR_VIEWPORT_RATIO = 0.25;
+const STATUS_ERROR_VIEWPORT_RATIO = 0.68;
 
 const downloadButtons = () => [byId("dlDocx"), byId("dlPdf")];
 
@@ -50,10 +52,12 @@ function markFieldInvalid(itemType, itemIndex) {
   }
 }
 
-/** Сообщение о незаполненном поле: тот же статус в подвале, но красным. */
+/** Общее сообщение о валидации показываем только toast-уведомлением.
+ * Локальная причина остаётся рядом с конкретным полем.
+ */
 function setProblemMessage(text) {
-  byId("statusMsg").classList.add("error");
-  setStatusMessage(text, VALIDATION_MESSAGE_TIMEOUT_MS);
+  byId("statusMsg")?.classList.remove("error");
+  setStatusMessage("");
   showToast(text, { timeout: VALIDATION_MESSAGE_TIMEOUT_MS, kind: "error", key: "validation" });
 }
 
@@ -97,11 +101,39 @@ function collectRequiredFieldProblems() {
 function targetForProblem(problem) {
   if (problem.kind === "title") {
     const input = byId(`title-${problem.itemType}-${problem.index}`);
-    return { container: input, focusTarget: input };
+    return { container: input, focusTarget: input, viewportRatio: TITLE_ERROR_VIEWPORT_RATIO };
   }
 
   const dropdown = byId(`status-${problem.itemType}-${problem.index}`);
-  return { container: dropdown, focusTarget: dropdown?.querySelector(".status-trigger") };
+  return {
+    container: dropdown,
+    focusTarget: dropdown?.querySelector(".status-trigger"),
+    viewportRatio: STATUS_ERROR_VIEWPORT_RATIO,
+  };
+}
+
+/**
+ * Ставит проблемное поле в предсказуемую точку viewport, а не строго по центру.
+ * Название кейса показываем в верхней трети — там его удобнее сразу исправлять.
+ * Статус оставляем ниже: над ним остаётся контекст карточки, к которой он относится.
+ */
+function scrollProblemIntoView(target) {
+  if (!target?.container) return;
+
+  const rect = target.container.getBoundingClientRect();
+  const headerBottom = document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0;
+  const footerTop = document.querySelector(".footbar")?.getBoundingClientRect().top ?? window.innerHeight;
+  const visibleTop = Math.max(0, headerBottom);
+  const visibleBottom = Math.min(window.innerHeight, footerTop);
+  const visibleHeight = Math.max(1, visibleBottom - visibleTop);
+  const ratio = target.viewportRatio ?? 0.5;
+  const desiredCenterY = visibleTop + visibleHeight * ratio;
+  const currentCenterY = rect.top + rect.height / 2;
+  const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  const nextTop = Math.max(0, Math.min(maxScroll, window.scrollY + currentCenterY - desiredCenterY));
+
+  window.scrollTo({ top: nextTop, behavior: "smooth" });
+  setTimeout(() => target.focusTarget?.focus({ preventScroll: true }), SCROLL_FOCUS_DELAY_MS);
 }
 
 function markProblemInvalid(problem) {
@@ -135,10 +167,7 @@ function highlightRequiredFields(problemsByTab) {
   problems.forEach(markProblemInvalid);
 
   const firstTarget = targetForProblem(problems[0]);
-  if (firstTarget.container) {
-    firstTarget.container.scrollIntoView({ behavior: "smooth", block: "center" });
-    setTimeout(() => firstTarget.focusTarget?.focus(), SCROLL_FOCUS_DELAY_MS);
-  }
+  scrollProblemIntoView(firstTarget);
 
   setProblemMessage("Заполните обязательные поля");
   return true;

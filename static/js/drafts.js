@@ -60,20 +60,109 @@ function draftCard(draft) {
   // event в inline-обработчике — аргумент функции, а не устаревший window.event
   // noinspection JSDeprecatedSymbols
   return `
-    <div class="draft-item ${draft.id === currentDraft._id ? "active" : ""}"
+    <div class="draft-item project-${badge.kind} ${draft.id === currentDraft._id ? "active" : ""}"
          role="button" tabindex="0"
          onclick="openDraft('${draft.id}')"
-         onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDraft('${draft.id}')}" >
+         onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDraft('${draft.id}')}">
       <div class="head">
         <div class="t">${escapeHtml(draft.title)}</div>
-        <span class="badge ${badge.kind}">${escapeHtml(badge.label)}</span>
+        <div class="draft-actions">
+          <button class="draft-menu-trigger" type="button" aria-label="Действия с отчётом" aria-expanded="false"
+                  onclick="event.stopPropagation();toggleDraftMenu(this)">
+            <span class="dots-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20">
+                <circle cx="10" cy="4.25" r="1.6"></circle>
+                <circle cx="10" cy="10" r="1.6"></circle>
+                <circle cx="10" cy="15.75" r="1.6"></circle>
+              </svg>
+            </span>
+          </button>
+          <div class="draft-menu" onclick="event.stopPropagation()">
+            <button type="button" onclick="renameDraft('${draft.id}',decodeURIComponent('${encodeURIComponent(draft.title)}'))">
+              <span class="menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M13.5 6.5 17.5 10.5M4 20l3.6-.8L18.7 8.1a1.8 1.8 0 0 0 0-2.6l-.2-.2a1.8 1.8 0 0 0-2.6 0L4.8 16.4 4 20Z"/></svg>
+              </span>
+              <span>Переименовать</span>
+            </button>
+            <button type="button" class="danger" onclick="deleteDraft('${draft.id}')">
+              <span class="menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M4.5 7h15M9 7V4.8h6V7m-8.7 0 .8 12h9.8l.8-12M10 10.5v5M14 10.5v5"/></svg>
+              </span>
+              <span>Удалить</span>
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="m">изм. ${formatUpdatedAt(draft.updated)} · ${draft.cases} кейс. · ${draft.bugs} баг.</div>
-      <div class="acts">
-        <button onclick="event.stopPropagation();renameDraft('${draft.id}',decodeURIComponent('${encodeURIComponent(draft.title)}'))">переименовать</button>
-        <button class="del" onclick="event.stopPropagation();deleteDraft('${draft.id}')">удалить</button>
+      <div class="draft-stats" aria-label="Количество кейсов и багов">
+        <div class="draft-stat" title="Тест-кейсы">
+          <span class="draft-stat-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <rect x="4" y="3.25" width="12" height="13.5" rx="2"/>
+              <path d="M7 7h6M7 10h6M7 13h4"/>
+            </svg>
+          </span>
+          <span class="draft-stat-main">
+            <span class="draft-stat-value">${draft.cases}</span>
+            <span class="draft-stat-label">кейс.</span>
+          </span>
+        </div>
+        <span class="draft-stat-divider" aria-hidden="true"></span>
+        <div class="draft-stat" title="Баги">
+          <span class="draft-stat-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <path d="M7 6.25h6M6 8.25h8v4.25A4 4 0 0 1 10 16.5a4 4 0 0 1-4-4V8.25Z"/>
+              <path d="M8 5a2 2 0 0 1 4 0M3.5 10H6M14 10h2.5M4.25 14l2-1M15.75 14l-2-1M4.25 6.5l2 1M15.75 6.5l-2 1M10 8.25v8.25"/>
+            </svg>
+          </span>
+          <span class="draft-stat-main">
+            <span class="draft-stat-value">${draft.bugs}</span>
+            <span class="draft-stat-label">баг.</span>
+          </span>
+        </div>
+      </div>
+      <div class="draft-foot">
+        <div class="draft-project ${badge.kind}">${escapeHtml(badge.label)}</div>
+        <div class="draft-updated" title="Последнее изменение">
+          <span class="draft-updated-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <rect x="3.25" y="4.5" width="13.5" height="12.25" rx="2"/>
+              <path d="M6.25 2.75v3.5M13.75 2.75v3.5M3.5 8h13"/>
+            </svg>
+          </span>
+          <span>${formatUpdatedAt(draft.updated)}</span>
+        </div>
       </div>
     </div>`;
+}
+
+export function toggleDraftMenu(trigger) {
+  const card = trigger.closest(".draft-item");
+  const menu = card?.querySelector(".draft-menu");
+  if (!menu) return;
+
+  document.querySelectorAll(".draft-menu.open").forEach((opened) => {
+    if (opened !== menu) {
+      opened.classList.remove("open");
+      const openedCard = opened.closest(".draft-item");
+      openedCard?.classList.remove("menu-open");
+      openedCard?.querySelector(".draft-menu-trigger")?.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  const open = !menu.classList.contains("open");
+  menu.classList.toggle("open", open);
+  card.classList.toggle("menu-open", open);
+  trigger.setAttribute("aria-expanded", String(open));
+}
+
+export function closeDraftMenus() {
+  document.querySelectorAll(".draft-menu.open").forEach((menu) => {
+    menu.classList.remove("open");
+    menu.closest(".draft-item")?.classList.remove("menu-open");
+  });
+  document.querySelectorAll(".draft-menu-trigger[aria-expanded=\"true\"]").forEach((trigger) => {
+    trigger.setAttribute("aria-expanded", "false");
+  });
 }
 
 /** Перерисовывает список черновиков в боковой панели. */
