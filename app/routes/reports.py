@@ -48,7 +48,7 @@ def build_download_name(draft_id: str, suffix: str) -> str:
 
 
 @router.post("/report/{output_format}")
-async def build_report(output_format: str, draft: dict):
+def build_report(output_format: str, draft: dict):
     """Готовит отчёт и сообщает, какой файл забирать.
 
     Повторный запрос без изменений в черновике отдаёт файл из кеша.

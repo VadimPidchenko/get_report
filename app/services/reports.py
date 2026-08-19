@@ -11,19 +11,15 @@
 
 import hashlib
 import json
-import os
-import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from app.config import (
-    GENERATOR_SCRIPT,
-    GENERATOR_TIMEOUT_SECONDS,
     REPORT_DOCX_NAME,
     REPORT_HASH_NAME,
     REPORT_PDF_NAME,
 )
+from app.services.generator_runner import GeneratorError, run_generator
 from app.storage.files import (
     ensure_directory,
     remove_file_if_exists,
@@ -34,10 +30,6 @@ from app.storage.paths import (
     draft_reports_path,
     report_file_path,
 )
-
-
-class GeneratorError(RuntimeError):
-    """Генератор не смог собрать отчёт."""
 
 
 @dataclass
@@ -77,47 +69,6 @@ def _choose_mode(output_format: str, is_fresh: bool, docx_ready: bool) -> str:
     return "pdf"
 
 
-def _run_generator(draft: dict, draft_id: str, output_dir: Path, mode: str) -> None:
-    """Запускает Node-генератор. В режиме convert данные не нужны."""
-    data_file = None
-    if mode != "convert":
-        with tempfile.NamedTemporaryFile(
-            "w", suffix=".json", delete=False, encoding="utf-8"
-        ) as temp:
-            json.dump(draft, temp, ensure_ascii=False)
-            data_file = temp.name
-
-    command = [
-        "node",
-        str(GENERATOR_SCRIPT),
-        data_file or os.devnull,
-        str(draft_images_path(draft_id)),
-        str(output_dir),
-        mode,
-    ]
-
-    try:
-        process = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=GENERATOR_TIMEOUT_SECONDS,
-        )
-    except FileNotFoundError as error:
-        raise GeneratorError("Node.js не найден — установите его, чтобы собирать отчёты") from error
-    except subprocess.TimeoutExpired as error:
-        raise GeneratorError("Генерация заняла слишком много времени") from error
-    finally:
-        if data_file:
-            try:
-                os.unlink(data_file)
-            except OSError:
-                pass
-
-    if process.returncode != 0:
-        raise GeneratorError(f"Генератор завершился с ошибкой:\n{process.stderr}")
-
-
 def build_report(draft: dict, output_format: str) -> ReportResult:
     """Готовит отчёт нужного формата и возвращает имя файла.
 
@@ -143,7 +94,7 @@ def build_report(draft: dict, output_format: str) -> ReportResult:
         return ReportResult(filename=requested_file.name, from_cache=True)
 
     mode = _choose_mode(output_format, is_fresh, docx_file.exists())
-    _run_generator(draft, draft_id, folder, mode)
+    run_generator(draft, draft_images_path(draft_id), folder, mode)
 
     if not requested_file.exists():
         raise GeneratorError("Генератор отработал, но файл не появился")
