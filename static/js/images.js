@@ -2,7 +2,8 @@
 
 import * as api from "./api.js";
 import { byId, closestElement, escapeHtml } from "./dom.js";
-import { currentDraft, ensureDraftId, itemsOf, scheduleSave } from "./state.js";
+import { currentDraft, itemsOf } from "./state.js";
+import { ensureDraftId, scheduleSave } from "./draft-persistence.js";
 import { showToast } from "./notifications.js";
 import { askText } from "./dialogs.js";
 

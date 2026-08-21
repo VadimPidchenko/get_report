@@ -12,14 +12,15 @@ import {
   itemsOf,
   createTestCase,
   createBug,
-  scheduleSave,
-  saveNow,
-  onDraftSaved,
-  LAST_DRAFT_STORAGE_KEY,
-  getOpenDraftId,
   cleanupEmptyListItems,
-  forgetOpenDraft,
 } from "./state.js";
+import { scheduleSave, onDraftSaved } from "./draft-persistence.js";
+import {
+  getLastDraftId,
+  getOpenDraftId,
+  forgetLastDraft,
+  forgetOpenDraft,
+} from "./draft-session.js";
 import {
   render,
   syncHeader,
@@ -683,7 +684,7 @@ function initHeaderFields() {
     };
   });
 
-  byId("draftName").onclick = () => renameCurrentDraft(saveNow);
+  byId("draftName").onclick = () => renameCurrentDraft();
 }
 
 function initSidebar() {
@@ -744,14 +745,14 @@ async function restoreInitialDraft() {
   }
 
   // ничего не открывали — предлагаем вернуться к прошлому черновику, если он непустой
-  const lastDraftId = localStorage.getItem(LAST_DRAFT_STORAGE_KEY);
+  const lastDraftId = getLastDraftId();
   if (lastDraftId) {
     try {
       const draft = await api.fetchDraft(lastDraftId);
       const hasContent = (draft.cases || []).length || (draft.bugs || []).length;
       if (hasContent) setResumeCandidate(draft);
     } catch (error) {
-      localStorage.removeItem(LAST_DRAFT_STORAGE_KEY);
+      forgetLastDraft();
     }
   }
 

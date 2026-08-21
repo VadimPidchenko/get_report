@@ -6,7 +6,8 @@
 
 import * as api from "./api.js";
 import { byId } from "./dom.js";
-import { currentDraft, collectHeaderFields, saveNow } from "./state.js";
+import { currentDraft } from "./state.js";
+import { saveNow } from "./draft-persistence.js";
 import { setStatusMessage, showToast } from "./notifications.js";
 
 const VALIDATION_MESSAGE_TIMEOUT_MS = 4500;
@@ -208,7 +209,7 @@ async function downloadReport(outputFormat, button) {
       return;
     }
 
-    const { file } = await api.buildReport(outputFormat, collectHeaderFields());
+    const { file } = await api.buildReport(outputFormat, currentDraft);
     triggerDownload(api.reportUrl(currentDraft._id, file));
   } catch (error) {
     const message = `Ошибка: ${String(error.message).slice(0, 160)}`;

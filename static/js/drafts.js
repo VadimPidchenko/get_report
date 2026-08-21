@@ -8,11 +8,14 @@ import {
   setCurrentDraft,
   isDraftEmpty,
   cleanupEmptyListItems,
-  LAST_DRAFT_STORAGE_KEY,
-  rememberOpenDraft,
-  forgetOpenDraft,
-  setAutosaveStatus,
 } from "./state.js";
+import {
+  getLastDraftId,
+  rememberOpenDraft,
+  forgetLastDraft,
+  forgetOpenDraft,
+} from "./draft-session.js";
+import { clearSaveStatus, saveNow } from "./draft-persistence.js";
 import { render, syncHeader, clearResumeCandidate } from "./render.js";
 import { showToast } from "./notifications.js";
 import { askText, confirmAction } from "./dialogs.js";
@@ -197,8 +200,8 @@ async function dropCurrentIfEmpty() {
   const snapshot = JSON.parse(JSON.stringify(currentDraft));
 
   await api.deleteDraft(draftId);
-  if (localStorage.getItem(LAST_DRAFT_STORAGE_KEY) === draftId) {
-    localStorage.removeItem(LAST_DRAFT_STORAGE_KEY);
+  if (getLastDraftId() === draftId) {
+    forgetLastDraft();
   }
 
   showToast(`Пустой отчёт <b>${escapeHtml(title)}</b> удалён`, {
@@ -226,7 +229,7 @@ export async function openDraft(draftId) {
   syncHeader();
   render();
   closeSidebar();
-  setAutosaveStatus("");
+  clearSaveStatus();
   await refreshDraftList();
 }
 
@@ -242,7 +245,7 @@ export async function openBlankDraft() {
   syncHeader();
   render();
   closeSidebar();
-  setAutosaveStatus("");
+  clearSaveStatus();
   await refreshDraftList();
 }
 
@@ -250,6 +253,18 @@ export async function openBlankDraft() {
 export async function startNewDraft() {
   await dropCurrentIfEmpty();
   await openBlankDraft();
+}
+
+/** Обновляет название текущего черновика через общую очередь сохранения. */
+async function saveCurrentDraftTitle(title) {
+  currentDraft._title = title;
+  byId("draftName").textContent = title;
+
+  try {
+    await saveNow();
+  } catch {
+    // Ошибка уже показана контроллером сохранения.
+  }
 }
 
 export async function renameDraft(draftId, currentTitle) {
@@ -262,11 +277,12 @@ export async function renameDraft(draftId, currentTitle) {
   });
   if (title === null) return;
 
-  await api.renameDraft(draftId, title);
   if (currentDraft._id === draftId) {
-    currentDraft._title = title;
-    byId("draftName").textContent = title;
+    await saveCurrentDraftTitle(title);
+    return;
   }
+
+  await api.renameDraft(draftId, title);
   await refreshDraftList();
 }
 
@@ -280,8 +296,8 @@ export async function deleteDraft(draftId) {
   if (!confirmed) return;
 
   await api.deleteDraft(draftId);
-  if (localStorage.getItem(LAST_DRAFT_STORAGE_KEY) === draftId) {
-    localStorage.removeItem(LAST_DRAFT_STORAGE_KEY);
+  if (getLastDraftId() === draftId) {
+    forgetLastDraft();
   }
 
   if (currentDraft._id === draftId) {
@@ -292,7 +308,7 @@ export async function deleteDraft(draftId) {
 }
 
 /** Переименование черновика по клику на название в шапке. */
-export async function renameCurrentDraft(saveNow) {
+export async function renameCurrentDraft() {
   const title = await askText({
     title: currentDraft._title ? "Переименовать отчёт" : "Создать отчёт",
     inputLabel: currentDraft._title ? "Новое название" : "Название",
@@ -302,7 +318,5 @@ export async function renameCurrentDraft(saveNow) {
   });
   if (title === null) return;
 
-  currentDraft._title = title;
-  byId("draftName").textContent = title;
-  await saveNow();
+  await saveCurrentDraftTitle(title);
 }
