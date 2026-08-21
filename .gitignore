@@ -8,6 +8,8 @@ generator/node_modules/
 # IDE и локальные инструменты
 .idea/
 .claude/
+.codex/
+.agents/
 AGENTS.md
 
 # Пользовательские данные приложения
