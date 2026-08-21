@@ -17,7 +17,7 @@ export function updateField(itemType, itemIndex, fieldName, value) {
   scheduleSave();
 }
 
-export function updateListItem(itemType, itemIndex, fieldName, pointIndex, value) {
+function updateListItem(itemType, itemIndex, fieldName, pointIndex, value) {
   itemsOf(itemType)[itemIndex][fieldName][pointIndex] = value;
   scheduleSave();
 }
@@ -41,7 +41,7 @@ function rerenderListField(itemType, itemIndex, fieldName) {
   );
 }
 
-export function addListItem(itemType, itemIndex, fieldName) {
+function addListItem(itemType, itemIndex, fieldName) {
   itemsOf(itemType)[itemIndex][fieldName].push("");
   // Обновляем только конкретный список. Полная render() пересоздавала <img>
   // в карточке, из-за чего превью заметно мигали при добавлении обычного шага.
@@ -148,7 +148,7 @@ function animateListRow(row, direction = "in") {
   });
 }
 
-export function removeListItem(itemType, itemIndex, fieldName, pointIndex) {
+function removeListItem(itemType, itemIndex, fieldName, pointIndex) {
   const list = itemsOf(itemType)[itemIndex][fieldName];
   const selector = `.list-field[data-item-type="${itemType}"][data-item-index="${itemIndex}"][data-field-name="${fieldName}"]`;
   const field = document.querySelector(selector);
@@ -284,7 +284,7 @@ function animateItemCard(card, direction = "in") {
   });
 }
 
-export function addItem(itemType) {
+function addItem(itemType) {
   const list = itemsOf(itemType);
   const item = itemType === "case" ? createTestCase() : createBug();
   const itemIndex = list.length;
@@ -310,7 +310,7 @@ export function addItem(itemType) {
   scheduleSave();
 }
 
-export function removeItem(itemType, itemIndex) {
+function removeItem(itemType, itemIndex) {
   const list = itemsOf(itemType);
   const item = list[itemIndex];
   const pane = paneFor(itemType);

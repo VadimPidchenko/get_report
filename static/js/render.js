@@ -8,8 +8,8 @@ import { currentDraft } from "./state.js";
 import { draftBadge, formatDay } from "./draft-meta.js";
 import * as api from "./api.js";
 
-export const CASE_STATUSES = ["Passed", "Failed", "Blocked", "Skipped"];
-export const BUG_STATUSES = ["To Do", "In Progress", "Done", "Backlog"];
+const CASE_STATUSES = ["Passed", "Failed", "Blocked", "Skipped"];
+const BUG_STATUSES = ["To Do", "In Progress", "Done", "Backlog"];
 
 const STATUS_CLASSES = {
   Passed: "passed",

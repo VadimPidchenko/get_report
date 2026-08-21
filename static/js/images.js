@@ -89,7 +89,7 @@ function restoreShotNode(itemType, itemIndex, fieldName, imageIndex, image) {
 let pendingTarget = null;
 
 /** Открывает системный выбор файла для конкретного поля. */
-export function pickImageFile(itemType, itemIndex, fieldName) {
+function pickImageFile(itemType, itemIndex, fieldName) {
   pendingTarget = { itemType, itemIndex, fieldName };
   byId("fileInput").click();
 }
@@ -168,7 +168,7 @@ async function uploadAndAttach(files, target) {
 }
 
 /** Удаляет картинку из поля и с диска, оставляя возможность вернуть. */
-export async function removeImage(itemType, itemIndex, fieldName, imageIndex) {
+async function removeImage(itemType, itemIndex, fieldName, imageIndex) {
   const image = itemsOf(itemType)[itemIndex][fieldName][imageIndex];
   const draftId = currentDraft._id;
 
@@ -203,7 +203,7 @@ export async function removeImage(itemType, itemIndex, fieldName, imageIndex) {
 }
 
 /** Меняет подпись к картинке. */
-export async function editCaption(itemType, itemIndex, fieldName, imageIndex) {
+async function editCaption(itemType, itemIndex, fieldName, imageIndex) {
   const image = itemsOf(itemType)[itemIndex][fieldName][imageIndex];
   const caption = await askText({
     title: "Изменить подпись",

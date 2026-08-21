@@ -25,12 +25,12 @@ import {
 import { showToast } from "./notifications.js";
 import { askText, confirmAction } from "./dialogs.js";
 
-export function openSidebar() {
+function openSidebar() {
   byId("sidebar").classList.add("open");
   byId("backdrop").classList.add("show");
 }
 
-export function closeSidebar() {
+function closeSidebar() {
   byId("sidebar").classList.remove("open");
   byId("backdrop").classList.remove("show");
 }
@@ -139,7 +139,7 @@ function draftCard(draft) {
     </div>`;
 }
 
-export function toggleDraftMenu(trigger) {
+function toggleDraftMenu(trigger) {
   const card = trigger.closest(".draft-item");
   const menu = card?.querySelector(".draft-menu");
   if (!menu) return;
@@ -214,7 +214,7 @@ async function dropCurrentIfEmpty() {
 }
 
 /** Открывает выбранный черновик. */
-export async function openDraft(draftId) {
+async function openDraft(draftId) {
   if (draftId === currentDraft._id) {
     closeSidebar();
     return;
@@ -235,7 +235,7 @@ export async function openDraft(draftId) {
 }
 
 /** Переходит на чистый лист, не трогая текущий черновик. */
-export async function openBlankDraft() {
+async function openBlankDraft() {
   clearResumeCandidate();
 
   setCurrentDraft(await api.fetchEmptyDraft());
@@ -251,7 +251,7 @@ export async function openBlankDraft() {
 }
 
 /** Создаёт новый черновик, убрав текущий, если он опустел. */
-export async function startNewDraft() {
+async function startNewDraft() {
   await dropCurrentIfEmpty();
   await openBlankDraft();
 }
@@ -268,7 +268,7 @@ async function saveCurrentDraftTitle(title) {
   }
 }
 
-export async function renameDraft(draftId, currentTitle) {
+async function renameDraft(draftId, currentTitle) {
   const title = await askText({
     title: "Переименовать отчёт",
     inputLabel: "Новое название",
@@ -287,7 +287,7 @@ export async function renameDraft(draftId, currentTitle) {
   await refreshDraftList();
 }
 
-export async function deleteDraft(draftId) {
+async function deleteDraft(draftId) {
   const confirmed = await confirmAction({
     title: "Удалить отчёт?",
     description: "Действие нельзя отменить.",
@@ -309,7 +309,7 @@ export async function deleteDraft(draftId) {
 }
 
 /** Переименование черновика по клику на название в шапке. */
-export async function renameCurrentDraft() {
+async function renameCurrentDraft() {
   const title = await askText({
     title: currentDraft._title ? "Переименовать отчёт" : "Создать отчёт",
     inputLabel: currentDraft._title ? "Новое название" : "Название",

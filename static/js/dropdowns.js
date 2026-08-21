@@ -210,6 +210,7 @@ export function initStatusDropdowns() {
     if (trigger && ["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
       event.preventDefault();
       closeProjectDropdown();
+      closeStatusDropdowns(dropdown);
       positionStatusDropdown(dropdown);
       dropdown.classList.add("open");
       trigger.setAttribute("aria-expanded", "true");

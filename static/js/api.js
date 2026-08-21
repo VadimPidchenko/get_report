@@ -2,7 +2,7 @@
 // Все запросы проходят здесь, поэтому обработка ошибок описана один раз.
 
 /** Ошибка запроса с текстом от сервера. */
-export class ApiError extends Error {
+class ApiError extends Error {
   constructor(message, status) {
     super(message);
     this.status = status;
