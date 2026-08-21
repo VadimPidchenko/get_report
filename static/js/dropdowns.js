@@ -42,20 +42,20 @@ export function initProjectDropdown() {
   const trigger = byId("projectTrigger");
   const dropdown = byId("projectDropdown");
 
-  trigger.onclick = (event) => {
+  trigger.addEventListener("click", (event) => {
     event.stopPropagation();
     if (dropdown.classList.contains("open")) closeProjectDropdown();
     else openProjectDropdown();
-  };
+  });
 
-  byId("projectOptions").onclick = (event) => {
+  byId("projectOptions").addEventListener("click", (event) => {
     const option = event.target.closest(".project-option");
     if (!option) return;
     event.stopPropagation();
     chooseProject(option.dataset.value);
-  };
+  });
 
-  trigger.onkeydown = (event) => {
+  trigger.addEventListener("keydown", (event) => {
     if (!["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) return;
     event.preventDefault();
     openProjectDropdown();
@@ -64,9 +64,9 @@ export function initProjectDropdown() {
     const index = Math.max(0, options.indexOf(selected));
     const target = event.key === "ArrowUp" ? options[Math.max(0, index - 1)] : options[Math.min(options.length - 1, index + (event.key === "ArrowDown" ? 1 : 0))];
     (target || selected || options[0])?.focus();
-  };
+  });
 
-  byId("projectOptions").onkeydown = (event) => {
+  byId("projectOptions").addEventListener("keydown", (event) => {
     const options = [...dropdown.querySelectorAll(".project-option:not([disabled])")];
     const index = options.indexOf(document.activeElement);
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -82,7 +82,7 @@ export function initProjectDropdown() {
       closeProjectDropdown();
       trigger.focus();
     }
-  };
+  });
 }
 
 function closeStatusDropdowns(except = null) {
@@ -110,8 +110,7 @@ function positionStatusDropdown(dropdown) {
 }
 
 /** Открывает меню статуса и закрывает другое открытое меню. */
-export function toggleStatusDropdown(dropdown, event) {
-  event.stopPropagation();
+function toggleStatusDropdown(dropdown) {
   closeProjectDropdown();
   const willOpen = !dropdown.classList.contains("open");
   closeStatusDropdowns(dropdown);
@@ -123,8 +122,7 @@ export function toggleStatusDropdown(dropdown, event) {
 }
 
 /** Выбирает статус, закрывает меню и снимает мышиный фокус с поля. */
-export function chooseStatus(itemType, itemIndex, status, option, event) {
-  event.stopPropagation();
+function chooseStatus(itemType, itemIndex, status, option) {
   updateField(itemType, itemIndex, "status", status);
 
   const dropdown = option.closest(".status-dropdown");
@@ -143,6 +141,36 @@ export function chooseStatus(itemType, itemIndex, status, option, event) {
 }
 
 export function initStatusDropdowns() {
+  const handleStatusClick = (event) => {
+    const actionTarget = event.target.closest?.("[data-action]");
+    if (!actionTarget) return;
+
+    if (actionTarget.dataset.action === "toggle-status") {
+      event.stopPropagation();
+      const dropdown = actionTarget.closest(".status-dropdown");
+      if (dropdown) toggleStatusDropdown(dropdown);
+      return;
+    }
+
+    if (actionTarget.dataset.action === "choose-status") {
+      const dropdown = actionTarget.closest(".status-dropdown");
+      const card = actionTarget.closest(".card[data-item-type][data-item-index]");
+      if (!dropdown || !card) return;
+
+      event.stopPropagation();
+      chooseStatus(
+        card.dataset.itemType,
+        Number(card.dataset.itemIndex),
+        actionTarget.dataset.status,
+        actionTarget,
+      );
+    }
+  };
+
+  [byId("casesPane"), byId("bugsPane")].forEach((pane) => {
+    pane.addEventListener("click", handleStatusClick);
+  });
+
   document.addEventListener("click", () => {
     closeStatusDropdowns();
     closeProjectDropdown();

@@ -15,12 +15,11 @@ const DELETE_UNDO_TIMEOUT_MS = 3000;
 function shotMarkup(image, itemType, itemIndex, fieldName, imageIndex) {
   const draftId = currentDraft._id;
   return `
-    <div class="shot">
-      <button class="x" onclick="removeImage('${itemType}',${itemIndex},'${fieldName}',${imageIndex})">×</button>
+    <div class="shot" data-image-index="${imageIndex}">
+      <button class="x" data-action="remove-image">×</button>
       <img src="${draftId ? api.imageUrl(draftId, image.file) : ""}" alt="">
       <button type="button" class="cap ${image.caption ? "" : "empty"}"
-           data-image-index="${imageIndex}"
-           onclick="event.stopPropagation(); editCaption('${itemType}',${itemIndex},'${fieldName}',${imageIndex})">
+           data-action="edit-caption">
         ${image.caption ? escapeHtml(image.caption) : "+ подпись"}
       </button>
     </div>`;
@@ -40,22 +39,7 @@ function reindexShots(itemType, itemIndex, fieldName) {
   if (!shots) return false;
 
   [...shots.querySelectorAll(".shot")].forEach((shot, imageIndex) => {
-    const removeButton = shot.querySelector(".x");
-    if (removeButton) {
-      removeButton.setAttribute(
-        "onclick",
-        `removeImage('${itemType}',${itemIndex},'${fieldName}',${imageIndex})`,
-      );
-    }
-
-    const captionButton = shot.querySelector(".cap");
-    if (captionButton) {
-      captionButton.dataset.imageIndex = String(imageIndex);
-      captionButton.setAttribute(
-        "onclick",
-        `event.stopPropagation(); editCaption('${itemType}',${itemIndex},'${fieldName}',${imageIndex})`,
-      );
-    }
+    shot.dataset.imageIndex = String(imageIndex);
   });
   return true;
 }
@@ -233,7 +217,7 @@ export async function editCaption(itemType, itemIndex, fieldName, imageIndex) {
   image.caption = caption;
 
   const dropzone = document.getElementById(`dz-${itemType}-${itemIndex}-${fieldName}`);
-  const captionButton = dropzone?.querySelector(`.cap[data-image-index="${imageIndex}"]`);
+  const captionButton = dropzone?.querySelector(`.shot[data-image-index="${imageIndex}"] .cap`);
   if (captionButton) {
     captionButton.textContent = caption || "+ подпись";
     captionButton.classList.toggle("empty", !caption);
@@ -270,7 +254,7 @@ function nameClipboardFile(file, index) {
  *
  * Вставка текста не страдает: если картинок в буфере нет, событие идёт дальше.
  */
-export function initPasteImages() {
+function initPasteImages() {
   document.addEventListener("paste", async (event) => {
     const dropzone = closestElement(document.activeElement, ".dropzone");
     if (!dropzone) return;
@@ -297,7 +281,7 @@ export function initPasteImages() {
  * Обработчики висят на документе, поэтому работают и для динамически
  * добавленных карточек/зон без повторного навешивания слушателей.
  */
-export function initDragAndDrop() {
+function initDragAndDrop() {
   document.addEventListener("dragover", (event) => {
     const dropzone = closestElement(event.target, ".dropzone");
     if (!dropzone) return;
@@ -332,9 +316,44 @@ export function initDragAndDrop() {
     if (!closestElement(event.target, ".dropzone")) event.preventDefault();
   });
 
-  byId("fileInput").onchange = async (event) => {
+}
+
+function handleImageClick(event) {
+  const actionTarget = event.target.closest?.("[data-action]");
+  const dropzone = actionTarget?.closest(".dropzone");
+  if (!actionTarget || !dropzone) return;
+
+  const target = dropzoneTarget(dropzone);
+  if (actionTarget.dataset.action === "pick-image") {
+    pickImageFile(target.itemType, target.itemIndex, target.fieldName);
+    return;
+  }
+
+  const shot = actionTarget.closest(".shot[data-image-index]");
+  if (!shot) return;
+  const imageIndex = Number(shot.dataset.imageIndex);
+
+  if (actionTarget.dataset.action === "remove-image") {
+    void removeImage(target.itemType, target.itemIndex, target.fieldName, imageIndex);
+  } else if (actionTarget.dataset.action === "edit-caption") {
+    // Подпись и раньше не закрывала открытые меню кликом через document.
+    event.stopPropagation();
+    void editCaption(target.itemType, target.itemIndex, target.fieldName, imageIndex);
+  }
+}
+
+/** Подключает выбор, вставку и drag-and-drop для всех динамических image-fields. */
+export function initImageEvents() {
+  [byId("casesPane"), byId("bugsPane")].forEach((pane) => {
+    pane.addEventListener("click", handleImageClick);
+  });
+
+  byId("fileInput").addEventListener("change", async (event) => {
     const files = [...event.target.files];
     event.target.value = "";
     await uploadAndAttach(files, pendingTarget);
-  };
+  });
+
+  initDragAndDrop();
+  initPasteImages();
 }

@@ -16,7 +16,12 @@ import {
   forgetOpenDraft,
 } from "./draft-session.js";
 import { clearSaveStatus, saveNow } from "./draft-persistence.js";
-import { render, syncHeader, clearResumeCandidate } from "./render.js";
+import {
+  render,
+  syncHeader,
+  clearResumeCandidate,
+  getResumeCandidate,
+} from "./render.js";
 import { showToast } from "./notifications.js";
 import { askText, confirmAction } from "./dialogs.js";
 
@@ -60,18 +65,14 @@ function groupByDay(drafts) {
 function draftCard(draft) {
   const badge = draftBadge(draft.project);
 
-  // event в inline-обработчике — аргумент функции, а не устаревший window.event
-  // noinspection JSDeprecatedSymbols
   return `
     <div class="draft-item project-${badge.kind} ${draft.id === currentDraft._id ? "active" : ""}"
-         role="button" tabindex="0"
-         onclick="openDraft('${draft.id}')"
-         onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDraft('${draft.id}')}">
+         role="button" tabindex="0" data-draft-id="${escapeHtml(draft.id)}">
       <div class="head">
         <div class="t">${escapeHtml(draft.title)}</div>
         <div class="draft-actions">
           <button class="draft-menu-trigger" type="button" aria-label="Действия с отчётом" aria-expanded="false"
-                  onclick="event.stopPropagation();toggleDraftMenu(this)">
+                  data-action="toggle-draft-menu">
             <span class="dots-icon" aria-hidden="true">
               <svg viewBox="0 0 20 20">
                 <circle cx="10" cy="4.25" r="1.6"></circle>
@@ -80,14 +81,14 @@ function draftCard(draft) {
               </svg>
             </span>
           </button>
-          <div class="draft-menu" onclick="event.stopPropagation()">
-            <button type="button" onclick="renameDraft('${draft.id}',decodeURIComponent('${encodeURIComponent(draft.title)}'))">
+          <div class="draft-menu">
+            <button type="button" data-action="rename-draft">
               <span class="menu-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M13.5 6.5 17.5 10.5M4 20l3.6-.8L18.7 8.1a1.8 1.8 0 0 0 0-2.6l-.2-.2a1.8 1.8 0 0 0-2.6 0L4.8 16.4 4 20Z"/></svg>
               </span>
               <span>Переименовать</span>
             </button>
-            <button type="button" class="danger" onclick="deleteDraft('${draft.id}')">
+            <button type="button" class="danger" data-action="delete-draft">
               <span class="menu-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M4.5 7h15M9 7V4.8h6V7m-8.7 0 .8 12h9.8l.8-12M10 10.5v5M14 10.5v5"/></svg>
               </span>
@@ -319,4 +320,82 @@ export async function renameCurrentDraft() {
   if (title === null) return;
 
   await saveCurrentDraftTitle(title);
+}
+
+async function resumeLastDraft() {
+  const candidate = getResumeCandidate();
+  if (!candidate) return;
+
+  clearResumeCandidate();
+  await openDraft(candidate._id);
+}
+
+function dismissResumeBar() {
+  clearResumeCandidate();
+  render();
+}
+
+function handleDraftListClick(event) {
+  const actionTarget = event.target.closest?.("[data-action]");
+  const card = event.target.closest?.(".draft-item[data-draft-id]");
+  if (!card) return;
+
+  if (actionTarget?.dataset.action === "toggle-draft-menu") {
+    event.stopPropagation();
+    toggleDraftMenu(actionTarget);
+    return;
+  }
+
+  if (actionTarget?.dataset.action === "rename-draft") {
+    event.stopPropagation();
+    const title = card.querySelector(".t")?.textContent || "";
+    void renameDraft(card.dataset.draftId, title);
+    return;
+  }
+
+  if (actionTarget?.dataset.action === "delete-draft") {
+    event.stopPropagation();
+    void deleteDraft(card.dataset.draftId);
+    return;
+  }
+
+  if (event.target.closest?.(".draft-menu")) {
+    event.stopPropagation();
+    return;
+  }
+
+  void openDraft(card.dataset.draftId);
+}
+
+function handleDraftListKeydown(event) {
+  const card = event.target.closest?.(".draft-item[data-draft-id]");
+  if (!card || event.target !== card || !["Enter", " "].includes(event.key)) return;
+
+  event.preventDefault();
+  void openDraft(card.dataset.draftId);
+}
+
+function handleResumeClick(event) {
+  const actionTarget = event.target.closest?.("[data-action]");
+  if (actionTarget?.dataset.action === "resume-last-draft") {
+    void resumeLastDraft();
+  } else if (actionTarget?.dataset.action === "dismiss-resume-bar") {
+    dismissResumeBar();
+  }
+}
+
+/** Подключает статические и делегированные события боковой панели/черновиков. */
+export function initDraftEvents() {
+  byId("burger").addEventListener("click", () => {
+    const isOpen = byId("sidebar").classList.contains("open");
+    if (isOpen) closeSidebar(); else openSidebar();
+  });
+  byId("backdrop").addEventListener("click", closeSidebar);
+  byId("newDraftBtn").addEventListener("click", startNewDraft);
+  byId("draftName").addEventListener("click", renameCurrentDraft);
+
+  const draftList = byId("draftList");
+  draftList.addEventListener("click", handleDraftListClick);
+  draftList.addEventListener("keydown", handleDraftListKeydown);
+  byId("casesPane").addEventListener("click", handleResumeClick);
 }

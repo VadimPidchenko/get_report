@@ -1,7 +1,7 @@
 // Отрисовка карточек тест-кейсов и баг-репортов.
 //
-// Разметка собирается строками, поэтому обработчики навешиваются через
-// атрибуты onclick — функции для них публикуются в app.js.
+// Разметка собирается строками, а события обслуживаются делегированными
+// обработчиками модулей-владельцев через классы и data-атрибуты.
 
 import { byId, escapeHtml, autoGrowAllTextareas, pluralize } from "./dom.js";
 import { currentDraft } from "./state.js";
@@ -48,13 +48,10 @@ export function renderListField(items, itemType, itemIndex, fieldName, addLabel)
   const single = values.length === 1;
 
   const rows = values.map((value, pointIndex) => `
-    <div class="list-item">
+    <div class="list-item" data-point-index="${pointIndex}">
       <span class="list-num">${pointIndex + 1}.</span>
-      <textarea rows="1"
-        oninput="updateListItem('${itemType}',${itemIndex},'${fieldName}',${pointIndex},this.value)"
-      >${escapeHtml(value)}</textarea>
-      <button class="list-del ${single ? "hidden" : ""}"
-        onclick="removeListItem('${itemType}',${itemIndex},'${fieldName}',${pointIndex})"
+      <textarea rows="1">${escapeHtml(value)}</textarea>
+      <button class="list-del ${single ? "hidden" : ""}" data-action="remove-list-item"
         aria-label="Удалить пункт" title="Удалить пункт"><span aria-hidden="true">×</span></button>
     </div>`).join("");
 
@@ -65,8 +62,7 @@ export function renderListField(items, itemType, itemIndex, fieldName, addLabel)
          data-field-name="${fieldName}"
          data-add-label="${escapeHtml(addLabel)}">
       ${rows}
-      <button class="list-add"
-        onclick="addListItem('${itemType}',${itemIndex},'${fieldName}')">+ ${addLabel}</button>
+      <button class="list-add" data-action="add-list-item">+ ${addLabel}</button>
     </div>`;
 }
 
@@ -88,12 +84,11 @@ function renderImageField(images, itemType, itemIndex, fieldName) {
   const draftId = currentDraft._id;
 
   const previews = (images || []).map((image, imageIndex) => `
-    <div class="shot">
-      <button class="x" onclick="removeImage('${itemType}',${itemIndex},'${fieldName}',${imageIndex})">×</button>
+    <div class="shot" data-image-index="${imageIndex}">
+      <button class="x" data-action="remove-image">×</button>
       <img src="${draftId ? api.imageUrl(draftId, image.file) : ""}" alt="">
       <button type="button" class="cap ${image.caption ? "" : "empty"}"
-           data-image-index="${imageIndex}"
-           onclick="event.stopPropagation(); editCaption('${itemType}',${itemIndex},'${fieldName}',${imageIndex})">
+           data-action="edit-caption">
         ${image.caption ? escapeHtml(image.caption) : "+ подпись"}
       </button>
     </div>`).join("");
@@ -103,7 +98,7 @@ function renderImageField(images, itemType, itemIndex, fieldName) {
          data-type="${itemType}" data-i="${itemIndex}" data-field="${fieldName}">
       <div class="shots">
         ${previews}
-        <button class="add-shot" onclick="pickImageFile('${itemType}',${itemIndex},'${fieldName}')">
+        <button class="add-shot" data-action="pick-image">
           <span class="ic">🖼</span><span>Добавить изображение</span>
         </button>
       </div>
@@ -124,7 +119,7 @@ function renderStatusSelect(itemType, itemIndex, currentStatus, options) {
       return `
         <button type="button" role="option" aria-selected="${selected}"
                 class="status-option status-${statusClass(status)} ${selected ? "selected" : ""}"
-                onclick="chooseStatus('${itemType}',${itemIndex},'${status}',this,event)">
+                data-action="choose-status" data-status="${status}">
           <span class="status-dot"></span>${label}
         </button>`;
     })
@@ -133,7 +128,7 @@ function renderStatusSelect(itemType, itemIndex, currentStatus, options) {
     <div id="status-${itemType}-${itemIndex}"
          class="status-dropdown status-${statusClass(currentStatus)}">
       <button type="button" class="status-trigger" aria-haspopup="listbox" aria-expanded="false"
-              onclick="toggleStatusDropdown(this.parentElement,event)">
+              data-action="toggle-status">
         <span class="status-label">${currentStatus || "Не выбран"}</span>
         <span class="status-arrow"></span>
       </button>
@@ -149,9 +144,8 @@ function renderTestCase(testCase, index) {
     <div class="card-head">
       <div class="idx">${index + 1}</div>
       <input class="title" id="title-case-${index}" placeholder="Название кейса" autocomplete="off"
-             value="${escapeHtml(testCase.name)}"
-             oninput="updateField('case',${index},'name',this.value); clearFieldError(this)">
-      <button class="del" onclick="removeItem('case',${index})" aria-label="Удалить кейс" title="Удалить кейс"><span aria-hidden="true">×</span></button>
+             data-field-name="name" value="${escapeHtml(testCase.name)}">
+      <button class="del" data-action="remove-item" aria-label="Удалить кейс" title="Удалить кейс"><span aria-hidden="true">×</span></button>
     </div>
 
     ${renderListRow(testCase.tasks, "case", index, "tasks", "Задачи", "Добавить задачу")}
@@ -183,15 +177,14 @@ function renderBug(bug, index) {
     <div class="card-head">
       <div class="idx">${index + 1}</div>
       <input class="title" id="title-bug-${index}" placeholder="Название бага" autocomplete="off"
-             value="${escapeHtml(bug.title)}"
-             oninput="updateField('bug',${index},'title',this.value); clearFieldError(this)">
-      <button class="del" onclick="removeItem('bug',${index})" aria-label="Удалить баг" title="Удалить баг"><span aria-hidden="true">×</span></button>
+             data-field-name="title" value="${escapeHtml(bug.title)}">
+      <button class="del" data-action="remove-item" aria-label="Удалить баг" title="Удалить баг"><span aria-hidden="true">×</span></button>
     </div>
 
     ${renderListRow(bug.tasks, "bug", index, "tasks", "Задачи", "Добавить задачу")}
 
     <div class="row"><label>Описание</label>
-        <div class="field-body"><textarea rows="3" oninput="updateField('bug',${index},'desc',this.value)">${escapeHtml(bug.desc)}</textarea></div></div>
+        <div class="field-body"><textarea rows="3" data-field-name="desc">${escapeHtml(bug.desc)}</textarea></div></div>
 
     <div class="row"><label>Скрины</label>
       <div class="field-body">${renderImageField(bug.images, "bug", index, "images")}</div></div>
@@ -235,8 +228,8 @@ function renderResumeBar() {
         <span class="resume-meta"><span>${escapeHtml(formatDay(resumeCandidate.date))}</span><span>· ${caseCount} ${caseWord}</span></span>
       </span>
       <span class="resume-actions">
-        <button class="go" onclick="resumeLastDraft()">Продолжить</button>
-        <button class="cls" onclick="dismissResumeBar()" title="Скрыть" aria-label="Скрыть предложение продолжить отчёт">✕</button>
+        <button class="go" data-action="resume-last-draft">Продолжить</button>
+        <button class="cls" data-action="dismiss-resume-bar" title="Скрыть" aria-label="Скрыть предложение продолжить отчёт">✕</button>
       </span>
     </div>`;
 }
@@ -274,12 +267,12 @@ export function render() {
 
   byId("casesPane").innerHTML =
     casesContent
-    + `<button class="add-case" onclick="addItem('case')">+ Добавить кейс</button>`
+    + `<button class="add-case" data-action="add-item" data-item-type="case">+ Добавить кейс</button>`
     + renderResumeBar();
 
   byId("bugsPane").innerHTML =
     bugsContent
-    + `<button class="add-case" onclick="addItem('bug')">+ Добавить баг</button>`;
+    + `<button class="add-case" data-action="add-item" data-item-type="bug">+ Добавить баг</button>`;
 
   byId("cCount").textContent = currentDraft.cases.length;
   byId("bCount").textContent = currentDraft.bugs.length;

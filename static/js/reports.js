@@ -38,6 +38,13 @@ export function clearFieldError(input) {
   input.closest?.(".card")?.querySelector(`.req-hint[data-error-for="${input.id}"]`)?.remove();
 }
 
+/** Снимает ошибку обязательного названия при вводе и для будущих карточек. */
+export function initValidationEvents() {
+  document.addEventListener("input", (event) => {
+    if (event.target.matches?.(".card-head .title")) clearFieldError(event.target);
+  });
+}
+
 function markFieldInvalid(itemType, itemIndex) {
   const input = byId(`title-${itemType}-${itemIndex}`);
   if (!input) return;
@@ -223,6 +230,6 @@ async function downloadReport(outputFormat, button) {
 }
 
 export function initDownloadButtons() {
-  byId("dlDocx").onclick = (event) => downloadReport("docx", event.currentTarget);
-  byId("dlPdf").onclick = (event) => downloadReport("pdf", event.currentTarget);
+  byId("dlDocx").addEventListener("click", (event) => downloadReport("docx", event.currentTarget));
+  byId("dlPdf").addEventListener("click", (event) => downloadReport("pdf", event.currentTarget));
 }

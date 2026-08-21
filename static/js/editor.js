@@ -1,7 +1,7 @@
 // Операции редактирования содержимого текущего черновика.
 
-import { byId } from "./dom.js";
-import { itemsOf, createTestCase, createBug } from "./state.js";
+import { byId, autoGrowTextarea } from "./dom.js";
+import { currentDraft, itemsOf, createTestCase, createBug } from "./state.js";
 import { scheduleSave } from "./draft-persistence.js";
 import {
   render,
@@ -187,11 +187,8 @@ function animateLastListItem(itemType, itemIndex, fieldName) {
 
 /** Ставит курсор в последнее поле списка после его добавления. */
 function focusLastListItem(itemType, itemIndex, fieldName) {
-  const fields = document.querySelectorAll(
-    `[onclick*="addListItem('${itemType}',${itemIndex},'${fieldName}')"]`,
-  );
-  const addButton = fields[0];
-  const lastTextarea = addButton?.parentElement?.querySelector(".list-item:last-of-type textarea");
+  const selector = `.list-field[data-item-type="${itemType}"][data-item-index="${itemIndex}"][data-field-name="${fieldName}"]`;
+  const lastTextarea = document.querySelector(`${selector} .list-item:last-of-type textarea`);
   lastTextarea?.focus();
 }
 
@@ -207,7 +204,7 @@ function updateItemCount(itemType) {
 /**
  * После удаления карточки данные следующих элементов сдвигаются на один индекс.
  * Сами DOM-узлы оставляем на месте (особенно <img>), меняем только индексы в
- * id/data/inline-handlers. Так превью не пересоздаются и не мигают.
+ * id/data. Так превью не пересоздаются и не мигают.
  */
 function reindexItemCard(card, itemType, oldIndex, newIndex) {
   if (oldIndex === newIndex) return;
@@ -216,23 +213,24 @@ function reindexItemCard(card, itemType, oldIndex, newIndex) {
   const badge = card.querySelector(".card-head .idx");
   if (badge) badge.textContent = String(newIndex + 1);
 
-  const nodes = [card, ...card.querySelectorAll("*")];
-  for (const node of nodes) {
-    for (const attr of [...node.attributes]) {
-      let value = attr.value;
-      const updated = value
-        .replaceAll(`'${itemType}',${oldIndex},`, `'${itemType}',${newIndex},`)
-        .replaceAll(`'${itemType}',${oldIndex})`, `'${itemType}',${newIndex})`)
-        .replaceAll(`-${itemType}-${oldIndex}-`, `-${itemType}-${newIndex}-`)
-        .replaceAll(`title-${itemType}-${oldIndex}`, `title-${itemType}-${newIndex}`)
-        .replaceAll(`status-${itemType}-${oldIndex}`, `status-${itemType}-${newIndex}`);
+  const title = card.querySelector(`#title-${itemType}-${oldIndex}`);
+  if (title) title.id = `title-${itemType}-${newIndex}`;
+  const titleHint = card.querySelector(
+    `.req-hint[data-error-for="title-${itemType}-${oldIndex}"]`,
+  );
+  if (titleHint) titleHint.dataset.errorFor = `title-${itemType}-${newIndex}`;
 
-      if (updated !== value) node.setAttribute(attr.name, updated);
-    }
+  const status = card.querySelector(`#status-${itemType}-${oldIndex}`);
+  if (status) status.id = `status-${itemType}-${newIndex}`;
 
-    if (node.dataset?.itemIndex === String(oldIndex)) node.dataset.itemIndex = String(newIndex);
-    if (node.dataset?.i === String(oldIndex)) node.dataset.i = String(newIndex);
-  }
+  card.querySelectorAll(".list-field").forEach((field) => {
+    field.dataset.itemIndex = String(newIndex);
+  });
+
+  card.querySelectorAll(".dropzone").forEach((dropzone) => {
+    dropzone.dataset.i = String(newIndex);
+    dropzone.id = `dz-${itemType}-${newIndex}-${dropzone.dataset.field}`;
+  });
 }
 
 /**
@@ -352,5 +350,90 @@ export function removeItem(itemType, itemIndex) {
     updateItemCount(itemType);
     refreshDownloadButtons();
     scheduleSave();
+  });
+}
+
+const headerFieldToProperty = { project: "project", date: "date", jira: "jira_base" };
+
+function handleEditorInput(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  if (target.tagName === "TEXTAREA") autoGrowTextarea(target);
+
+  const headerProperty = headerFieldToProperty[target.id];
+  if (headerProperty) {
+    currentDraft[headerProperty] = target.value;
+    scheduleSave();
+    return;
+  }
+
+  const card = target.closest(".card[data-item-type][data-item-index]");
+  if (!card) return;
+
+  const itemType = card.dataset.itemType;
+  const itemIndex = Number(card.dataset.itemIndex);
+  const listField = target.closest(".list-field[data-field-name]");
+  const listItem = target.closest(".list-item[data-point-index]");
+
+  if (listField && listItem && target.matches("textarea")) {
+    updateListItem(
+      itemType,
+      itemIndex,
+      listField.dataset.fieldName,
+      Number(listItem.dataset.pointIndex),
+      target.value,
+    );
+    return;
+  }
+
+  if (target.matches("[data-field-name]")) {
+    updateField(itemType, itemIndex, target.dataset.fieldName, target.value);
+  }
+}
+
+function handleEditorClick(event) {
+  const actionTarget = event.target.closest?.("[data-action]");
+  if (!actionTarget) return;
+
+  if (actionTarget.dataset.action === "add-item") {
+    addItem(actionTarget.dataset.itemType);
+    return;
+  }
+
+  const card = actionTarget.closest(".card[data-item-type][data-item-index]");
+  if (!card) return;
+
+  const itemType = card.dataset.itemType;
+  const itemIndex = Number(card.dataset.itemIndex);
+
+  if (actionTarget.dataset.action === "remove-item") {
+    removeItem(itemType, itemIndex);
+    return;
+  }
+
+  const listField = actionTarget.closest(".list-field[data-field-name]");
+  if (!listField) return;
+
+  if (actionTarget.dataset.action === "add-list-item") {
+    addListItem(itemType, itemIndex, listField.dataset.fieldName);
+  } else if (actionTarget.dataset.action === "remove-list-item") {
+    const listItem = actionTarget.closest(".list-item[data-point-index]");
+    if (listItem) {
+      removeListItem(
+        itemType,
+        itemIndex,
+        listField.dataset.fieldName,
+        Number(listItem.dataset.pointIndex),
+      );
+    }
+  }
+}
+
+/** Подключает единые обработчики ко всем текущим и будущим карточкам редактора. */
+export function initEditorEvents() {
+  document.addEventListener("input", handleEditorInput);
+  [byId("casesPane"), byId("bugsPane")].forEach((pane) => {
+    pane.addEventListener("click", handleEditorClick);
   });
 }
