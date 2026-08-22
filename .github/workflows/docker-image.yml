@@ -8,6 +8,7 @@ on:
       - "README.md"
       - "compose.yaml"
       - ".gitignore"
+      - ".github/workflows/user-release.yml"
 
 permissions:
   contents: read
