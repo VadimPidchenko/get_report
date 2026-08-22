@@ -1,0 +1,49 @@
+name: User Kit Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare user kit
+        run: |
+          mkdir -p dist/get_report/{drafts,images,reports}
+          cp README.md compose.yaml dist/get_report/
+
+      - name: Create user kit archive
+        run: |
+          cd dist
+          zip -r get-report-user-kit.zip get_report
+          unzip -l get-report-user-kit.zip
+
+      - name: Publish user kit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: user-kit
+          ASSET_PATH: dist/get-report-user-kit.zip
+
+        run: |
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$ASSET_PATH" --clobber
+
+            gh release edit "$RELEASE_TAG" \
+              --title "Get Report — пользовательский комплект" \
+              --notes "Готовый комплект для запуска актуальной версии Get Report через Docker Compose. Скачайте файл get-report-user-kit.zip из раздела Assets." \
+              --latest
+          else
+            gh release create "$RELEASE_TAG" "$ASSET_PATH" \
+              --target "$GITHUB_SHA" \
+              --title "Get Report — пользовательский комплект" \
+              --notes "Готовый комплект для запуска актуальной версии Get Report через Docker Compose. Скачайте файл get-report-user-kit.zip из раздела Assets." \
+              --latest
+          fi

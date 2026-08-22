@@ -15,7 +15,12 @@ reports/*
 !reports/.gitkeep
 
 Dockerfile
+compose.yaml
 .dockerignore
+.gitignore
+.github/
 
-.claude/
 .idea/
+
+AGENTS.md
+README.md
