@@ -8,20 +8,29 @@ import {
   setCurrentDraft,
   isDraftEmpty,
   cleanupEmptyListItems,
-  LAST_DRAFT_STORAGE_KEY,
-  rememberOpenDraft,
-  forgetOpenDraft,
-  setAutosaveStatus,
 } from "./state.js";
-import { render, syncHeader, clearResumeCandidate } from "./render.js";
+import {
+  getLastDraftId,
+  rememberOpenDraft,
+  forgetLastDraft,
+  forgetOpenDraft,
+} from "./draft-session.js";
+import { clearSaveStatus, saveNow } from "./draft-persistence.js";
+import {
+  render,
+  syncHeader,
+  clearResumeCandidate,
+  getResumeCandidate,
+} from "./render.js";
 import { showToast } from "./notifications.js";
+import { askText, confirmAction } from "./dialogs.js";
 
-export function openSidebar() {
+function openSidebar() {
   byId("sidebar").classList.add("open");
   byId("backdrop").classList.add("show");
 }
 
-export function closeSidebar() {
+function closeSidebar() {
   byId("sidebar").classList.remove("open");
   byId("backdrop").classList.remove("show");
 }
@@ -56,21 +65,108 @@ function groupByDay(drafts) {
 function draftCard(draft) {
   const badge = draftBadge(draft.project);
 
-  // event в inline-обработчике — аргумент функции, а не устаревший window.event
-  // noinspection JSDeprecatedSymbols
   return `
-    <div class="draft-item ${draft.id === currentDraft._id ? "active" : ""}"
-         onclick="openDraft('${draft.id}')">
+    <div class="draft-item project-${badge.kind} ${draft.id === currentDraft._id ? "active" : ""}"
+         role="button" tabindex="0" data-draft-id="${escapeHtml(draft.id)}">
       <div class="head">
         <div class="t">${escapeHtml(draft.title)}</div>
-        <span class="badge ${badge.kind}">${escapeHtml(badge.label)}</span>
+        <div class="draft-actions">
+          <button class="draft-menu-trigger" type="button" aria-label="Действия с отчётом" aria-expanded="false"
+                  data-action="toggle-draft-menu">
+            <span class="dots-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20">
+                <circle cx="10" cy="4.25" r="1.6"></circle>
+                <circle cx="10" cy="10" r="1.6"></circle>
+                <circle cx="10" cy="15.75" r="1.6"></circle>
+              </svg>
+            </span>
+          </button>
+          <div class="draft-menu">
+            <button type="button" data-action="rename-draft">
+              <span class="menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M13.5 6.5 17.5 10.5M4 20l3.6-.8L18.7 8.1a1.8 1.8 0 0 0 0-2.6l-.2-.2a1.8 1.8 0 0 0-2.6 0L4.8 16.4 4 20Z"/></svg>
+              </span>
+              <span>Переименовать</span>
+            </button>
+            <button type="button" class="danger" data-action="delete-draft">
+              <span class="menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M4.5 7h15M9 7V4.8h6V7m-8.7 0 .8 12h9.8l.8-12M10 10.5v5M14 10.5v5"/></svg>
+              </span>
+              <span>Удалить</span>
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="m">изм. ${formatUpdatedAt(draft.updated)} · ${draft.cases} кейс. · ${draft.bugs} баг.</div>
-      <div class="acts">
-        <button onclick="event.stopPropagation();renameDraft('${draft.id}','${escapeHtml(draft.title)}')">переименовать</button>
-        <button class="del" onclick="event.stopPropagation();deleteDraft('${draft.id}')">удалить</button>
+      <div class="draft-stats" aria-label="Количество кейсов и багов">
+        <div class="draft-stat" title="Тест-кейсы">
+          <span class="draft-stat-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <rect x="4" y="3.25" width="12" height="13.5" rx="2"/>
+              <path d="M7 7h6M7 10h6M7 13h4"/>
+            </svg>
+          </span>
+          <span class="draft-stat-main">
+            <span class="draft-stat-value">${draft.cases}</span>
+            <span class="draft-stat-label">кейс.</span>
+          </span>
+        </div>
+        <span class="draft-stat-divider" aria-hidden="true"></span>
+        <div class="draft-stat" title="Баги">
+          <span class="draft-stat-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <path d="M7 6.25h6M6 8.25h8v4.25A4 4 0 0 1 10 16.5a4 4 0 0 1-4-4V8.25Z"/>
+              <path d="M8 5a2 2 0 0 1 4 0M3.5 10H6M14 10h2.5M4.25 14l2-1M15.75 14l-2-1M4.25 6.5l2 1M15.75 6.5l-2 1M10 8.25v8.25"/>
+            </svg>
+          </span>
+          <span class="draft-stat-main">
+            <span class="draft-stat-value">${draft.bugs}</span>
+            <span class="draft-stat-label">баг.</span>
+          </span>
+        </div>
+      </div>
+      <div class="draft-foot">
+        <div class="draft-project ${badge.kind}">${escapeHtml(badge.label)}</div>
+        <div class="draft-updated" title="Последнее изменение">
+          <span class="draft-updated-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <rect x="3.25" y="4.5" width="13.5" height="12.25" rx="2"/>
+              <path d="M6.25 2.75v3.5M13.75 2.75v3.5M3.5 8h13"/>
+            </svg>
+          </span>
+          <span>${formatUpdatedAt(draft.updated)}</span>
+        </div>
       </div>
     </div>`;
+}
+
+function toggleDraftMenu(trigger) {
+  const card = trigger.closest(".draft-item");
+  const menu = card?.querySelector(".draft-menu");
+  if (!menu) return;
+
+  document.querySelectorAll(".draft-menu.open").forEach((opened) => {
+    if (opened !== menu) {
+      opened.classList.remove("open");
+      const openedCard = opened.closest(".draft-item");
+      openedCard?.classList.remove("menu-open");
+      openedCard?.querySelector(".draft-menu-trigger")?.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  const open = !menu.classList.contains("open");
+  menu.classList.toggle("open", open);
+  card.classList.toggle("menu-open", open);
+  trigger.setAttribute("aria-expanded", String(open));
+}
+
+export function closeDraftMenus() {
+  document.querySelectorAll(".draft-menu.open").forEach((menu) => {
+    menu.classList.remove("open");
+    menu.closest(".draft-item")?.classList.remove("menu-open");
+  });
+  document.querySelectorAll(".draft-menu-trigger[aria-expanded=\"true\"]").forEach((trigger) => {
+    trigger.setAttribute("aria-expanded", "false");
+  });
 }
 
 /** Перерисовывает список черновиков в боковой панели. */
@@ -105,8 +201,8 @@ async function dropCurrentIfEmpty() {
   const snapshot = JSON.parse(JSON.stringify(currentDraft));
 
   await api.deleteDraft(draftId);
-  if (localStorage.getItem(LAST_DRAFT_STORAGE_KEY) === draftId) {
-    localStorage.removeItem(LAST_DRAFT_STORAGE_KEY);
+  if (getLastDraftId() === draftId) {
+    forgetLastDraft();
   }
 
   showToast(`Пустой отчёт <b>${escapeHtml(title)}</b> удалён`, {
@@ -118,7 +214,7 @@ async function dropCurrentIfEmpty() {
 }
 
 /** Открывает выбранный черновик. */
-export async function openDraft(draftId) {
+async function openDraft(draftId) {
   if (draftId === currentDraft._id) {
     closeSidebar();
     return;
@@ -134,12 +230,12 @@ export async function openDraft(draftId) {
   syncHeader();
   render();
   closeSidebar();
-  setAutosaveStatus("");
+  clearSaveStatus();
   await refreshDraftList();
 }
 
 /** Переходит на чистый лист, не трогая текущий черновик. */
-export async function openBlankDraft() {
+async function openBlankDraft() {
   clearResumeCandidate();
 
   setCurrentDraft(await api.fetchEmptyDraft());
@@ -150,34 +246,59 @@ export async function openBlankDraft() {
   syncHeader();
   render();
   closeSidebar();
-  setAutosaveStatus("");
+  clearSaveStatus();
   await refreshDraftList();
 }
 
 /** Создаёт новый черновик, убрав текущий, если он опустел. */
-export async function startNewDraft() {
+async function startNewDraft() {
   await dropCurrentIfEmpty();
   await openBlankDraft();
 }
 
-export async function renameDraft(draftId, currentTitle) {
-  const title = prompt("Новое название:", currentTitle);
+/** Обновляет название текущего черновика через общую очередь сохранения. */
+async function saveCurrentDraftTitle(title) {
+  currentDraft._title = title;
+  byId("draftName").textContent = title;
+
+  try {
+    await saveNow();
+  } catch {
+    // Ошибка уже показана контроллером сохранения.
+  }
+}
+
+async function renameDraft(draftId, currentTitle) {
+  const title = await askText({
+    title: "Переименовать отчёт",
+    inputLabel: "Новое название",
+    value: currentTitle,
+    confirmLabel: "Сохранить",
+    required: true,
+  });
   if (title === null) return;
 
-  await api.renameDraft(draftId, title);
   if (currentDraft._id === draftId) {
-    currentDraft._title = title;
-    byId("draftName").textContent = title;
+    await saveCurrentDraftTitle(title);
+    return;
   }
+
+  await api.renameDraft(draftId, title);
   await refreshDraftList();
 }
 
-export async function deleteDraft(draftId) {
-  if (!confirm("Удалить этот черновик?")) return;
+async function deleteDraft(draftId) {
+  const confirmed = await confirmAction({
+    title: "Удалить отчёт?",
+    description: "Действие нельзя отменить.",
+    confirmLabel: "Удалить",
+    danger: true,
+  });
+  if (!confirmed) return;
 
   await api.deleteDraft(draftId);
-  if (localStorage.getItem(LAST_DRAFT_STORAGE_KEY) === draftId) {
-    localStorage.removeItem(LAST_DRAFT_STORAGE_KEY);
+  if (getLastDraftId() === draftId) {
+    forgetLastDraft();
   }
 
   if (currentDraft._id === draftId) {
@@ -188,11 +309,93 @@ export async function deleteDraft(draftId) {
 }
 
 /** Переименование черновика по клику на название в шапке. */
-export async function renameCurrentDraft(saveNow) {
-  const title = prompt("Название черновика:", currentDraft._title || "");
+async function renameCurrentDraft() {
+  const title = await askText({
+    title: currentDraft._title ? "Переименовать отчёт" : "Создать отчёт",
+    inputLabel: currentDraft._title ? "Новое название" : "Название",
+    value: currentDraft._title || "",
+    confirmLabel: "Сохранить",
+    required: true,
+  });
   if (title === null) return;
 
-  currentDraft._title = title;
-  byId("draftName").textContent = title;
-  await saveNow();
+  await saveCurrentDraftTitle(title);
+}
+
+async function resumeLastDraft() {
+  const candidate = getResumeCandidate();
+  if (!candidate) return;
+
+  clearResumeCandidate();
+  await openDraft(candidate._id);
+}
+
+function dismissResumeBar() {
+  clearResumeCandidate();
+  render();
+}
+
+function handleDraftListClick(event) {
+  const actionTarget = event.target.closest?.("[data-action]");
+  const card = event.target.closest?.(".draft-item[data-draft-id]");
+  if (!card) return;
+
+  if (actionTarget?.dataset.action === "toggle-draft-menu") {
+    event.stopPropagation();
+    toggleDraftMenu(actionTarget);
+    return;
+  }
+
+  if (actionTarget?.dataset.action === "rename-draft") {
+    event.stopPropagation();
+    const title = card.querySelector(".t")?.textContent || "";
+    void renameDraft(card.dataset.draftId, title);
+    return;
+  }
+
+  if (actionTarget?.dataset.action === "delete-draft") {
+    event.stopPropagation();
+    void deleteDraft(card.dataset.draftId);
+    return;
+  }
+
+  if (event.target.closest?.(".draft-menu")) {
+    event.stopPropagation();
+    return;
+  }
+
+  void openDraft(card.dataset.draftId);
+}
+
+function handleDraftListKeydown(event) {
+  const card = event.target.closest?.(".draft-item[data-draft-id]");
+  if (!card || event.target !== card || !["Enter", " "].includes(event.key)) return;
+
+  event.preventDefault();
+  void openDraft(card.dataset.draftId);
+}
+
+function handleResumeClick(event) {
+  const actionTarget = event.target.closest?.("[data-action]");
+  if (actionTarget?.dataset.action === "resume-last-draft") {
+    void resumeLastDraft();
+  } else if (actionTarget?.dataset.action === "dismiss-resume-bar") {
+    dismissResumeBar();
+  }
+}
+
+/** Подключает статические и делегированные события боковой панели/черновиков. */
+export function initDraftEvents() {
+  byId("burger").addEventListener("click", () => {
+    const isOpen = byId("sidebar").classList.contains("open");
+    if (isOpen) closeSidebar(); else openSidebar();
+  });
+  byId("backdrop").addEventListener("click", closeSidebar);
+  byId("newDraftBtn").addEventListener("click", startNewDraft);
+  byId("draftName").addEventListener("click", renameCurrentDraft);
+
+  const draftList = byId("draftList");
+  draftList.addEventListener("click", handleDraftListClick);
+  draftList.addEventListener("keydown", handleDraftListKeydown);
+  byId("casesPane").addEventListener("click", handleResumeClick);
 }

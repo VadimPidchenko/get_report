@@ -2,19 +2,94 @@
 
 import * as api from "./api.js";
 import { byId, closestElement, escapeHtml } from "./dom.js";
-import { currentDraft, ensureDraftId, itemsOf, scheduleSave } from "./state.js";
-import { render } from "./render.js";
+import { currentDraft, itemsOf } from "./state.js";
+import { ensureDraftId, scheduleSave } from "./draft-persistence.js";
 import { showToast } from "./notifications.js";
+import { askText } from "./dialogs.js";
 
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g)$/i;
 const FIELD_ERROR_TIMEOUT_MS = 5000;
 const DELETE_UNDO_TIMEOUT_MS = 3000;
 
+/** Разметка одного превью. Используется для точечного обновления DOM без полного render(). */
+function shotMarkup(image, itemType, itemIndex, fieldName, imageIndex) {
+  const draftId = currentDraft._id;
+  return `
+    <div class="shot" data-image-index="${imageIndex}">
+      <button class="x" data-action="remove-image">×</button>
+      <img src="${draftId ? api.imageUrl(draftId, image.file) : ""}" alt="">
+      <button type="button" class="cap ${image.caption ? "" : "empty"}"
+           data-action="edit-caption">
+        ${image.caption ? escapeHtml(image.caption) : "+ подпись"}
+      </button>
+    </div>`;
+}
+
+/** Возвращает контейнер превью конкретного image-field. */
+function shotsContainer(itemType, itemIndex, fieldName) {
+  return byId(`dz-${itemType}-${itemIndex}-${fieldName}`)?.querySelector(".shots") || null;
+}
+
+/**
+ * После вставки/удаления картинки обновляет только индексы следующих превью.
+ * Сами <img> не пересоздаются, поэтому соседние изображения не мигают.
+ */
+function reindexShots(itemType, itemIndex, fieldName) {
+  const shots = shotsContainer(itemType, itemIndex, fieldName);
+  if (!shots) return false;
+
+  [...shots.querySelectorAll(".shot")].forEach((shot, imageIndex) => {
+    shot.dataset.imageIndex = String(imageIndex);
+  });
+  return true;
+}
+
+/** Добавляет в DOM только новые превью, не затрагивая уже существующие картинки. */
+function appendShots(target, images, startIndex) {
+  const shots = shotsContainer(target.itemType, target.itemIndex, target.fieldName);
+  const addButton = shots?.querySelector(".add-shot");
+  if (!shots || !addButton) return false;
+
+  images.forEach((image, offset) => {
+    addButton.insertAdjacentHTML(
+      "beforebegin",
+      shotMarkup(image, target.itemType, target.itemIndex, target.fieldName, startIndex + offset),
+    );
+  });
+  return true;
+}
+
+/** Удаляет из DOM только одно превью. */
+function removeShotNode(itemType, itemIndex, fieldName, imageIndex) {
+  const shots = shotsContainer(itemType, itemIndex, fieldName);
+  const shot = shots?.querySelectorAll(".shot")[imageIndex];
+  if (!shot) return false;
+  shot.remove();
+  reindexShots(itemType, itemIndex, fieldName);
+  return true;
+}
+
+/** Возвращает удалённое превью на прежнюю позицию без перерисовки соседей. */
+function restoreShotNode(itemType, itemIndex, fieldName, imageIndex, image) {
+  const shots = shotsContainer(itemType, itemIndex, fieldName);
+  const addButton = shots?.querySelector(".add-shot");
+  if (!shots || !addButton) return false;
+
+  const existing = shots.querySelectorAll(".shot");
+  const before = existing[imageIndex] || addButton;
+  before.insertAdjacentHTML(
+    "beforebegin",
+    shotMarkup(image, itemType, itemIndex, fieldName, imageIndex),
+  );
+  reindexShots(itemType, itemIndex, fieldName);
+  return true;
+}
+
 /** Куда прикрепить выбранные через диалог файлы. */
 let pendingTarget = null;
 
 /** Открывает системный выбор файла для конкретного поля. */
-export function pickImageFile(itemType, itemIndex, fieldName) {
+function pickImageFile(itemType, itemIndex, fieldName) {
   pendingTarget = { itemType, itemIndex, fieldName };
   byId("fileInput").click();
 }
@@ -61,7 +136,9 @@ async function uploadAndAttach(files, target) {
     return;
   }
 
-  let attachedCount = 0;
+  const targetImages = itemsOf(target.itemType)[target.itemIndex][target.fieldName];
+  const firstNewIndex = targetImages.length;
+  const attachedImages = [];
   let hasRejected = false;
 
   for (const file of files) {
@@ -72,18 +149,16 @@ async function uploadAndAttach(files, target) {
 
     try {
       const { saved } = await api.uploadImage(draftId, file);
-      itemsOf(target.itemType)[target.itemIndex][target.fieldName].push({
-        file: saved,
-        caption: "",
-      });
-      attachedCount += 1;
+      const image = { file: saved, caption: "" };
+      targetImages.push(image);
+      attachedImages.push(image);
     } catch (error) {
       hasRejected = true;
     }
   }
 
-  if (attachedCount) {
-    render();
+  if (attachedImages.length) {
+    appendShots(target, attachedImages, firstNewIndex);
     scheduleSave();
   }
 
@@ -93,12 +168,12 @@ async function uploadAndAttach(files, target) {
 }
 
 /** Удаляет картинку из поля и с диска, оставляя возможность вернуть. */
-export async function removeImage(itemType, itemIndex, fieldName, imageIndex) {
+async function removeImage(itemType, itemIndex, fieldName, imageIndex) {
   const image = itemsOf(itemType)[itemIndex][fieldName][imageIndex];
   const draftId = currentDraft._id;
 
   itemsOf(itemType)[itemIndex][fieldName].splice(imageIndex, 1);
-  render();
+  removeShotNode(itemType, itemIndex, fieldName, imageIndex);
   scheduleSave();
 
   if (!draftId || !image) return;
@@ -118,8 +193,9 @@ export async function removeImage(itemType, itemIndex, fieldName, imageIndex) {
 
       const targetList = itemsOf(itemType)[itemIndex]?.[fieldName];
       if (targetList) {
-        targetList.splice(Math.min(imageIndex, targetList.length), 0, image);
-        render();
+        const restoreIndex = Math.min(imageIndex, targetList.length);
+        targetList.splice(restoreIndex, 0, image);
+        restoreShotNode(itemType, itemIndex, fieldName, restoreIndex, image);
         scheduleSave();
       }
     },
@@ -127,13 +203,27 @@ export async function removeImage(itemType, itemIndex, fieldName, imageIndex) {
 }
 
 /** Меняет подпись к картинке. */
-export function editCaption(itemType, itemIndex, fieldName, imageIndex) {
+async function editCaption(itemType, itemIndex, fieldName, imageIndex) {
   const image = itemsOf(itemType)[itemIndex][fieldName][imageIndex];
-  const caption = prompt("Подпись к изображению:", image.caption || "");
+  const caption = await askText({
+    title: "Изменить подпись",
+    inputLabel: "Текст подписи",
+    value: image.caption || "",
+    confirmLabel: "Сохранить",
+    restoreFocus: false,
+  });
   if (caption === null) return;
 
   image.caption = caption;
-  render();
+
+  const dropzone = document.getElementById(`dz-${itemType}-${itemIndex}-${fieldName}`);
+  const captionButton = dropzone?.querySelector(`.shot[data-image-index="${imageIndex}"] .cap`);
+  if (captionButton) {
+    captionButton.textContent = caption || "+ подпись";
+    captionButton.classList.toggle("empty", !caption);
+    captionButton.blur();
+  }
+
   scheduleSave();
 }
 
@@ -164,7 +254,7 @@ function nameClipboardFile(file, index) {
  *
  * Вставка текста не страдает: если картинок в буфере нет, событие идёт дальше.
  */
-export function initPasteImages() {
+function initPasteImages() {
   document.addEventListener("paste", async (event) => {
     const dropzone = closestElement(document.activeElement, ".dropzone");
     if (!dropzone) return;
@@ -179,8 +269,8 @@ export function initPasteImages() {
     const target = dropzoneTarget(dropzone);
     await uploadAndAttach(images, target);
 
-    // перерисовка заменила зону новой — возвращаем фокус, чтобы можно было
-    // вставить следующий скриншот, не кликая заново
+    // DOM зоны больше не пересоздаётся: сохраняем фокус, чтобы следующий
+    // Ctrl+V можно было сделать без повторного клика.
     byId(`dz-${target.itemType}-${target.itemIndex}-${target.fieldName}`)?.focus();
   });
 }
@@ -188,10 +278,10 @@ export function initPasteImages() {
 /**
  * Перетаскивание файлов.
  *
- * Обработчики висят на документе: карточки перерисовываются целиком,
- * и навешивать слушатели на каждую зону заново было бы лишней работой.
+ * Обработчики висят на документе, поэтому работают и для динамически
+ * добавленных карточек/зон без повторного навешивания слушателей.
  */
-export function initDragAndDrop() {
+function initDragAndDrop() {
   document.addEventListener("dragover", (event) => {
     const dropzone = closestElement(event.target, ".dropzone");
     if (!dropzone) return;
@@ -226,9 +316,44 @@ export function initDragAndDrop() {
     if (!closestElement(event.target, ".dropzone")) event.preventDefault();
   });
 
-  byId("fileInput").onchange = async (event) => {
+}
+
+function handleImageClick(event) {
+  const actionTarget = event.target.closest?.("[data-action]");
+  const dropzone = actionTarget?.closest(".dropzone");
+  if (!actionTarget || !dropzone) return;
+
+  const target = dropzoneTarget(dropzone);
+  if (actionTarget.dataset.action === "pick-image") {
+    pickImageFile(target.itemType, target.itemIndex, target.fieldName);
+    return;
+  }
+
+  const shot = actionTarget.closest(".shot[data-image-index]");
+  if (!shot) return;
+  const imageIndex = Number(shot.dataset.imageIndex);
+
+  if (actionTarget.dataset.action === "remove-image") {
+    void removeImage(target.itemType, target.itemIndex, target.fieldName, imageIndex);
+  } else if (actionTarget.dataset.action === "edit-caption") {
+    // Подпись и раньше не закрывала открытые меню кликом через document.
+    event.stopPropagation();
+    void editCaption(target.itemType, target.itemIndex, target.fieldName, imageIndex);
+  }
+}
+
+/** Подключает выбор, вставку и drag-and-drop для всех динамических image-fields. */
+export function initImageEvents() {
+  [byId("casesPane"), byId("bugsPane")].forEach((pane) => {
+    pane.addEventListener("click", handleImageClick);
+  });
+
+  byId("fileInput").addEventListener("change", async (event) => {
     const files = [...event.target.files];
     event.target.value = "";
     await uploadAndAttach(files, pendingTarget);
-  };
+  });
+
+  initDragAndDrop();
+  initPasteImages();
 }

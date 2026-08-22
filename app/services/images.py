@@ -7,39 +7,41 @@
 import base64
 from pathlib import Path
 
-from app.config import ALLOWED_IMAGE_EXTENSIONS, IMAGES_DIR
-
-
-def images_dir(draft_id: str) -> Path:
-    """Папка картинок черновика, создаётся при первом обращении."""
-    folder = IMAGES_DIR / draft_id
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder
+from app.config import ALLOWED_IMAGE_EXTENSIONS
+from app.storage.files import (
+    ensure_directory,
+    remove_directory_if_empty,
+    remove_file_if_exists,
+)
+from app.storage.paths import draft_images_path, image_file_path
 
 
 def image_path(draft_id: str, filename: str) -> Path:
-    return IMAGES_DIR / draft_id / filename
+    """Возвращает путь к изображению, не создавая каталогов."""
+    return image_file_path(draft_id, filename)
 
 
-def is_allowed_extension(filename: str) -> bool:
+def is_allowed_extension(filename: str | None) -> bool:
+    if not filename:
+        return False
     return Path(filename).suffix.lower() in ALLOWED_IMAGE_EXTENSIONS
 
 
-def pick_free_filename(folder: Path, filename: str) -> str:
+def _pick_free_filename(draft_id: str, filename: str) -> str:
     """Подбирает свободное имя: file.png, file_1.png, file_2.png…"""
-    candidate = folder / filename
+    candidate = image_file_path(draft_id, filename)
     if not candidate.exists():
         return filename
 
     stem = Path(filename).stem
     suffix = Path(filename).suffix
     counter = 1
-    while (folder / f"{stem}_{counter}{suffix}").exists():
+    while image_file_path(draft_id, f"{stem}_{counter}{suffix}").exists():
         counter += 1
     return f"{stem}_{counter}{suffix}"
 
 
-def normalize_to_png(path: Path) -> None:
+def _normalize_image_file(path: Path) -> None:
     """Приводит картинку к настоящему PNG, если формат не PNG и не JPEG.
 
     Скриншоты на самом деле могут быть одного формата, а расширение ставят .png. Такой файл
@@ -63,11 +65,11 @@ def normalize_to_png(path: Path) -> None:
 
 def save_image(draft_id: str, filename: str, content: bytes) -> str:
     """Сохраняет картинку и возвращает итоговое имя файла."""
-    folder = images_dir(draft_id)
-    final_name = pick_free_filename(folder, filename)
-    destination = folder / final_name
+    ensure_directory(draft_images_path(draft_id))
+    final_name = _pick_free_filename(draft_id, filename)
+    destination = image_file_path(draft_id, final_name)
     destination.write_bytes(content)
-    normalize_to_png(destination)
+    _normalize_image_file(destination)
     return final_name
 
 
@@ -76,24 +78,19 @@ def delete_image(draft_id: str, filename: str) -> str | None:
 
     Если после удаления папка опустела — убирает и её.
     """
-    folder = IMAGES_DIR / draft_id
-    path = folder / filename
+    folder = draft_images_path(draft_id)
+    path = image_file_path(draft_id, filename)
     if not path.exists():
         return None
 
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    path.unlink()
-
-    try:
-        if folder.exists() and not any(folder.iterdir()):
-            folder.rmdir()
-    except OSError:
-        pass  # папку удалить не удалось — не критично
+    remove_file_if_exists(path)
+    remove_directory_if_empty(folder)
 
     return encoded
 
 
 def restore_image(draft_id: str, filename: str, encoded_content: str) -> None:
     """Возвращает удалённую картинку на место (кнопка «Отменить»)."""
-    folder = images_dir(draft_id)
-    (folder / filename).write_bytes(base64.b64decode(encoded_content))
+    ensure_directory(draft_images_path(draft_id))
+    image_file_path(draft_id, filename).write_bytes(base64.b64decode(encoded_content))

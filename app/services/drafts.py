@@ -5,17 +5,13 @@
 """
 
 import json
-import shutil
 import uuid
 from datetime import date, datetime
-from pathlib import Path
 
-from app.config import (
-    DEFAULT_JIRA_BASE,
-    DRAFTS_DIR,
-    IMAGES_DIR,
-    REPORTS_DIR,
-)
+from app.config import DEFAULT_JIRA_BASE
+from app.storage.files import read_json, write_json_atomic
+from app.storage.paths import draft_file_path
+from app.storage.workspace import delete_draft_resources, iter_draft_files
 
 
 def build_empty_draft() -> dict:
@@ -37,12 +33,8 @@ def build_empty_draft() -> dict:
     }
 
 
-def draft_path(draft_id: str) -> Path:
-    return DRAFTS_DIR / f"{draft_id}.json"
-
-
 def draft_exists(draft_id: str) -> bool:
-    return draft_path(draft_id).exists()
+    return draft_file_path(draft_id).exists()
 
 
 def read_draft(draft_id: str) -> dict:
@@ -51,7 +43,7 @@ def read_draft(draft_id: str) -> dict:
     Существование файла проверяется на уровне роутов — сюда попадает
     только запрос по-существующему id.
     """
-    return json.loads(draft_path(draft_id).read_text(encoding="utf-8"))
+    return read_json(draft_file_path(draft_id))
 
 
 def write_draft(draft: dict) -> dict:
@@ -65,10 +57,7 @@ def write_draft(draft: dict) -> dict:
         # без даты: она и так стоит в карточке сайдбара рядом с названием
         draft["_title"] = "Отчёт о тестировании"
 
-    draft_path(draft_id).write_text(
-        json.dumps(draft, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    write_json_atomic(draft_file_path(draft_id), draft)
     return draft
 
 
@@ -76,20 +65,13 @@ def rename_draft(draft_id: str, new_title: str) -> str:
     """Меняет название черновика, возвращает установленное значение."""
     draft = read_draft(draft_id)
     draft["_title"] = new_title
-    draft_path(draft_id).write_text(
-        json.dumps(draft, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    write_json_atomic(draft_file_path(draft_id), draft)
     return draft["_title"]
 
 
 def delete_draft(draft_id: str) -> None:
     """Удаляет черновик вместе с его картинками и отчётами."""
-    draft_path(draft_id).unlink(missing_ok=True)
-
-    for folder in (IMAGES_DIR / draft_id, REPORTS_DIR / draft_id):
-        if folder.exists():
-            shutil.rmtree(folder, ignore_errors=True)
+    delete_draft_resources(draft_id)
 
 
 def _report_day(raw) -> date | None:
@@ -108,9 +90,9 @@ def list_drafts() -> list[dict]:
     наверх: место в списке меняется, только если поменяли саму дату.
     """
     summaries = []
-    for file in DRAFTS_DIR.glob("*.json"):
+    for file in iter_draft_files():
         try:
-            draft = json.loads(file.read_text(encoding="utf-8"))
+            draft = read_json(file)
         except (json.JSONDecodeError, OSError):
             continue  # повреждённый файл просто пропускаем
 

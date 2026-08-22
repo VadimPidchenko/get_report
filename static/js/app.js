@@ -2,276 +2,45 @@
 
 import * as api from "./api.js";
 import {
-    byId,
-    autoGrowTextarea,
-    autoGrowAllTextareas,
-} from "./dom.js";
-import {
   currentDraft,
   setCurrentDraft,
-  itemsOf,
-  createTestCase,
-  createBug,
-  scheduleSave,
-  saveNow,
-  onDraftSaved,
-  LAST_DRAFT_STORAGE_KEY,
-  getOpenDraftId,
   cleanupEmptyListItems,
-  forgetOpenDraft,
 } from "./state.js";
+import { onDraftSaved } from "./draft-persistence.js";
+import {
+  getLastDraftId,
+  getOpenDraftId,
+  forgetLastDraft,
+  forgetOpenDraft,
+} from "./draft-session.js";
 import {
   render,
   syncHeader,
   onAfterRender,
   setResumeCandidate,
-  clearResumeCandidate,
-  getResumeCandidate,
-  statusClass,
 } from "./render.js";
 import {
   refreshDraftList,
-  openSidebar,
-  closeSidebar,
-  openDraft,
-  startNewDraft,
-  renameDraft,
-  deleteDraft,
-  renameCurrentDraft,
+  initDraftEvents,
 } from "./drafts.js";
-import {
-  initDragAndDrop,
-  initPasteImages,
-  pickImageFile,
-  removeImage,
-  editCaption,
-} from "./images.js";
+import { initImageEvents } from "./images.js";
 import {
   initDownloadButtons,
   refreshDownloadButtons,
-  clearFieldError,
+  initValidationEvents,
 } from "./reports.js";
-
-// ─── правки содержимого ───
-
-function updateField(itemType, itemIndex, fieldName, value) {
-  itemsOf(itemType)[itemIndex][fieldName] = value;
-  scheduleSave();
-}
-
-function closeStatusDropdowns(except = null) {
-  document.querySelectorAll(".status-dropdown.open").forEach((dropdown) => {
-    if (dropdown === except) return;
-    dropdown.classList.remove("open");
-    dropdown.querySelector(".status-trigger")?.setAttribute("aria-expanded", "false");
-  });
-}
-
-/** Открывает меню статуса и закрывает другое открытое меню. */
-function toggleStatusDropdown(dropdown, event) {
-  event.stopPropagation();
-  const willOpen = !dropdown.classList.contains("open");
-  closeStatusDropdowns(dropdown);
-  dropdown.classList.toggle("open", willOpen);
-  dropdown.querySelector(".status-trigger")?.setAttribute("aria-expanded", String(willOpen));
-}
-
-/** Выбирает статус, закрывает меню и снимает мышиный фокус с поля. */
-function chooseStatus(itemType, itemIndex, status, option, event) {
-  event.stopPropagation();
-  updateField(itemType, itemIndex, "status", status);
-
-  const dropdown = option.closest(".status-dropdown");
-  dropdown.className = `status-dropdown status-${statusClass(status)}`;
-  dropdown.querySelector(".status-label").textContent = status || "Не выбран";
-  dropdown.querySelector(".status-trigger").setAttribute("aria-expanded", "false");
-  dropdown.querySelectorAll(".status-option").forEach((item) => {
-    const selected = item === option;
-    item.classList.toggle("selected", selected);
-    item.setAttribute("aria-selected", String(selected));
-  });
-
-  clearFieldError(dropdown);
-  option.blur();
-}
-
-function initStatusDropdowns() {
-  document.addEventListener("click", () => closeStatusDropdowns());
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    closeStatusDropdowns();
-    document.activeElement?.blur();
-  });
-}
-
-function updateListItem(itemType, itemIndex, fieldName, pointIndex, value) {
-  itemsOf(itemType)[itemIndex][fieldName][pointIndex] = value;
-  scheduleSave();
-}
-
-function addListItem(itemType, itemIndex, fieldName) {
-  itemsOf(itemType)[itemIndex][fieldName].push("");
-  render();
-  // фокус в только что добавленное поле — печатать можно сразу
-  focusLastListItem(itemType, itemIndex, fieldName);
-  scheduleSave();
-}
-
-function removeListItem(itemType, itemIndex, fieldName, pointIndex) {
-  const list = itemsOf(itemType)[itemIndex][fieldName];
-  list.splice(pointIndex, 1);
-  if (!list.length) list.push("");   // хотя бы один пункт всегда остаётся
-  render();
-  scheduleSave();
-}
-
-/** Ставит курсор в последнее поле списка после его добавления. */
-function focusLastListItem(itemType, itemIndex, fieldName) {
-  const fields = document.querySelectorAll(
-    `[onclick*="addListItem('${itemType}',${itemIndex},'${fieldName}')"]`,
-  );
-  const addButton = fields[0];
-  const lastTextarea = addButton?.parentElement?.querySelector(".list-item:last-of-type textarea");
-  lastTextarea?.focus();
-}
-
-function addItem(itemType) {
-  itemsOf(itemType).push(itemType === "case" ? createTestCase() : createBug());
-  clearResumeCandidate();
-  render();
-  scheduleSave();
-}
-
-function removeItem(itemType, itemIndex) {
-  itemsOf(itemType).splice(itemIndex, 1);
-  render();
-  scheduleSave();
-}
-
-// ─── восстановление прошлой работы ───
-
-async function resumeLastDraft() {
-  const candidate = getResumeCandidate();
-  if (!candidate) return;
-
-  clearResumeCandidate();
-  await openDraft(candidate._id);
-}
-
-function dismissResumeBar() {
-  clearResumeCandidate();
-  render();
-}
-
-/**
- * Разметка карточек собирается строками, поэтому обработчики в атрибутах
- * ищут функции в глобальной области. Публикуем только то, что там нужно.
- */
-function exposeInlineHandlers() {
-  // часть обработчиков вызывается только из onclick в строках разметки —
-  // анализатор их не видит и считает неиспользуемыми
-  // noinspection JSUnusedGlobalSymbols
-  Object.assign(window, {
-    updateField,
-    toggleStatusDropdown,
-    chooseStatus,
-    addItem,
-    removeItem,
-    pickImageFile,
-    removeImage,
-    editCaption,
-    clearFieldError,
-    openDraft,
-    renameDraft,
-    deleteDraft,
-    resumeLastDraft,
-    dismissResumeBar,
-    updateListItem,
-    addListItem,
-    removeListItem,
-  });
-}
-
-// ─── обработчики интерфейса ───
-
-const ACTIVE_TAB_STORAGE_KEY = "activeTab";
-
-/** Показывает нужную вкладку и запоминает выбор до конца сессии. */
-function activateTab(tabName) {
-  document.querySelectorAll(".tab").forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.tab === tabName);
-  });
-
-  const isCasesTab = tabName === "cases";
-  byId("casesPane").style.display = isCasesTab ? "" : "none";
-  byId("bugsPane").style.display = isCasesTab ? "none" : "";
-
-  sessionStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabName);
-
-  // панель рисовалась скрытой, а у скрытой scrollHeight = 0 —
-  // высоту textarea можно посчитать только сейчас, когда она видима
-  autoGrowAllTextareas();
-}
-
-function initTabs() {
-  document.querySelectorAll(".tab").forEach((tab) => {
-    tab.onclick = () => {
-      activateTab(tab.dataset.tab);
-      window.scrollTo(0, 0);
-    };
-  });
-}
-
-function initHeaderFields() {
-  const fieldToProperty = { project: "project", date: "date", jira: "jira_base" };
-
-  Object.entries(fieldToProperty).forEach(([elementId, property]) => {
-    byId(elementId).oninput = (event) => {
-      currentDraft[property] = event.target.value;
-      scheduleSave();
-    };
-  });
-
-  byId("draftName").onclick = () => renameCurrentDraft(saveNow);
-}
-
-function initSidebar() {
-  byId("burger").onclick = () => {
-    const isOpen = byId("sidebar").classList.contains("open");
-    if (isOpen) closeSidebar(); else openSidebar();
-  };
-  byId("backdrop").onclick = closeSidebar;
-  byId("newDraftBtn").onclick = startNewDraft;
-}
-
-function initAutoGrow() {
-  document.addEventListener("input", (event) => {
-    if (event.target?.tagName === "TEXTAREA") autoGrowTextarea(event.target);
-  });
-}
-
-const SCROLL_STORAGE_KEY = "report_app_scroll";
-
-/** Запоминает позицию прокрутки перед уходом со страницы. */
-function initScrollMemory() {
-  // браузер восстанавливает прокрутку сам, но к тому моменту страница ещё пуста —
-  // забираем это на себя, чтобы он не мешал
-  history.scrollRestoration = "manual";
-
-  window.addEventListener("beforeunload", () => {
-    sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
-  });
-}
-
-/** Возвращает прокрутку туда, где она была до перезагрузки. */
-function restoreScroll() {
-  const saved = Number(sessionStorage.getItem(SCROLL_STORAGE_KEY));
-  if (!saved) return;
-
-  // textarea растягиваются в render(), высота страницы меняется —
-  // прокручиваем следующим кадром, когда раскладка уже посчитана
-  requestAnimationFrame(() => window.scrollTo(0, saved));
-}
+import { initDialogs } from "./dialogs.js";
+import { initEditorEvents } from "./editor.js";
+import {
+  initProjectDropdown,
+  initStatusDropdowns,
+} from "./dropdowns.js";
+import {
+  initTabs,
+  initScrollMemory,
+  restoreSavedTab,
+  restoreScroll,
+} from "./view-session.js";
 
 /**
  * Готовит начальное состояние.
@@ -293,14 +62,14 @@ async function restoreInitialDraft() {
   }
 
   // ничего не открывали — предлагаем вернуться к прошлому черновику, если он непустой
-  const lastDraftId = localStorage.getItem(LAST_DRAFT_STORAGE_KEY);
+  const lastDraftId = getLastDraftId();
   if (lastDraftId) {
     try {
       const draft = await api.fetchDraft(lastDraftId);
       const hasContent = (draft.cases || []).length || (draft.bugs || []).length;
       if (hasContent) setResumeCandidate(draft);
     } catch (error) {
-      localStorage.removeItem(LAST_DRAFT_STORAGE_KEY);
+      forgetLastDraft();
     }
   }
 
@@ -311,15 +80,15 @@ async function restoreInitialDraft() {
 }
 
 async function init() {
-  exposeInlineHandlers();
   initTabs();
-  initHeaderFields();
-  initSidebar();
-  initAutoGrow();
+  initEditorEvents();
+  initProjectDropdown();
+  initDialogs();
+  initDraftEvents();
   initStatusDropdowns();
+  initValidationEvents();
   initScrollMemory();
-  initDragAndDrop();
-  initPasteImages();
+  initImageEvents();
   initDownloadButtons();
 
   onAfterRender(refreshDownloadButtons);
@@ -329,7 +98,7 @@ async function init() {
 
   // вкладку восстанавливаем до render(): autoGrow не умеет считать высоту
   // у скрытой панели, поэтому нужная вкладка должна быть уже видима
-  activateTab(sessionStorage.getItem(ACTIVE_TAB_STORAGE_KEY) || "cases");
+  restoreSavedTab();
 
   syncHeader();
   render();

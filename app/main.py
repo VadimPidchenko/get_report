@@ -6,15 +6,27 @@
 Интерфейс открывается на http://127.0.0.1:8000
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.config import STATIC_DIR, ensure_directories
+from app.config import STATIC_DIR
 from app.routes import drafts, images, reports
+from app.storage.paths import InvalidStoragePath
+from app.storage.workspace import ensure_workspace_directories
 
-ensure_directories()
+ensure_workspace_directories()
 
 app = FastAPI(title="Сборка отчётов о тестировании")
+
+
+@app.exception_handler(InvalidStoragePath)
+async def invalid_storage_path_handler(
+    _request: Request,
+    error: InvalidStoragePath,
+) -> JSONResponse:
+    """Не пропускает запросы за границы локального workspace."""
+    return JSONResponse(status_code=400, content={"detail": str(error)})
 
 app.include_router(drafts.router)
 app.include_router(images.router)

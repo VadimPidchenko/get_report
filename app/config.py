@@ -1,14 +1,14 @@
-"""Пути к каталогам проекта и общие константы."""
+"""Конфигурация приложения и корневые пути workspace."""
 
 from pathlib import Path
 
 # корень проекта — на уровень выше пакета app/
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-DRAFTS_DIR = BASE_DIR / "drafts"          # черновики отчётов (по JSON на каждый)
-IMAGES_DIR = BASE_DIR / "images"     # картинки, по папке на черновик
-REPORTS_DIR = BASE_DIR / "reports"        # готовые docx/pdf, по папке на черновик
-STATIC_DIR = BASE_DIR / "static"          # фронтенд
+DRAFTS_DIR = BASE_DIR / "drafts"       # черновики отчётов (по JSON на каждый)
+IMAGES_DIR = BASE_DIR / "images"       # изображения (по папке на черновик)
+REPORTS_DIR = BASE_DIR / "reports"     # готовые docx/pdf (по папке на черновик)
+STATIC_DIR = BASE_DIR / "static"       # frontend
 
 GENERATOR_SCRIPT = BASE_DIR / "generator" / "generate_report.js"
 
@@ -25,9 +25,3 @@ REPORT_HASH_NAME = ".hash"
 
 # сколько ждать генератор, прежде чем считать её зависшей
 GENERATOR_TIMEOUT_SECONDS = 30
-
-
-def ensure_directories() -> None:
-    """Создаёт рабочие каталоги, если их ещё нет."""
-    for directory in (DRAFTS_DIR, IMAGES_DIR, REPORTS_DIR):
-        directory.mkdir(parents=True, exist_ok=True)
