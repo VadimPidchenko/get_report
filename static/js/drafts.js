@@ -24,6 +24,7 @@ import {
 } from "./render.js";
 import { showToast } from "./notifications.js";
 import { askText, confirmAction } from "./dialogs.js";
+import { closeItemMenus } from "./editor.js";
 
 function openSidebar() {
   byId("sidebar").classList.add("open");
@@ -144,6 +145,10 @@ function toggleDraftMenu(trigger) {
   const menu = card?.querySelector(".draft-menu");
   if (!menu) return;
 
+  const open = !menu.classList.contains("open");
+  if (open) document.dispatchEvent(new Event("app:close-competing-menus"));
+  closeItemMenus();
+
   document.querySelectorAll(".draft-menu.open").forEach((opened) => {
     if (opened !== menu) {
       opened.classList.remove("open");
@@ -153,7 +158,6 @@ function toggleDraftMenu(trigger) {
     }
   });
 
-  const open = !menu.classList.contains("open");
   menu.classList.toggle("open", open);
   card.classList.toggle("menu-open", open);
   trigger.setAttribute("aria-expanded", String(open));
@@ -397,5 +401,9 @@ export function initDraftEvents() {
   const draftList = byId("draftList");
   draftList.addEventListener("click", handleDraftListClick);
   draftList.addEventListener("keydown", handleDraftListKeydown);
+  draftList.addEventListener("scroll", () => {
+    document.dispatchEvent(new Event("app:close-competing-menus"));
+    closeItemMenus();
+  }, { passive: true });
   byId("casesPane").addEventListener("click", handleResumeClick);
 }

@@ -138,6 +138,48 @@ function renderStatusSelect(itemType, itemIndex, currentStatus, options) {
     </div>`;
 }
 
+/** Общее меню действий карточки кейса или бага. */
+function renderItemActions(itemType) {
+  const itemLabel = itemType === "case" ? "кейсом" : "багом";
+  const deleteLabel = itemType === "case" ? "Удалить кейс" : "Удалить баг";
+
+  return `
+    <div class="item-actions">
+      <button class="item-menu-trigger" type="button"
+              aria-label="Действия с ${itemLabel}" aria-haspopup="menu" aria-expanded="false"
+              data-action="toggle-item-menu">
+        <span class="dots-icon" aria-hidden="true">
+          <svg viewBox="0 0 20 20">
+            <circle cx="10" cy="4.25" r="1.6"></circle>
+            <circle cx="10" cy="10" r="1.6"></circle>
+            <circle cx="10" cy="15.75" r="1.6"></circle>
+          </svg>
+        </span>
+      </button>
+      <div class="item-menu" role="menu">
+        <button type="button" role="menuitem" data-action="duplicate-item">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+            </svg>
+          </span>
+          <span>Дублировать</span>
+        </button>
+        <div class="item-menu-separator" aria-hidden="true"></div>
+        <button type="button" role="menuitem" class="danger" data-action="remove-item"
+                aria-label="${deleteLabel}">
+          <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4.5 7h15M9 7V4.8h6V7m-8.7 0 .8 12h9.8l.8-12M10 10.5v5M14 10.5v5"></path>
+            </svg>
+          </span>
+          <span>Удалить</span>
+        </button>
+      </div>
+    </div>`;
+}
+
 function renderTestCase(testCase, index) {
   return `
   <div class="card" data-item-type="case" data-item-index="${index}">
@@ -145,7 +187,7 @@ function renderTestCase(testCase, index) {
       <div class="idx">${index + 1}</div>
       <input class="title" id="title-case-${index}" placeholder="Название кейса" autocomplete="off"
              data-field-name="name" value="${escapeHtml(testCase.name)}">
-      <button class="del" data-action="remove-item" aria-label="Удалить кейс" title="Удалить кейс"><span aria-hidden="true">×</span></button>
+      ${renderItemActions("case")}
     </div>
 
     ${renderListRow(testCase.tasks, "case", index, "tasks", "Задачи", "Добавить задачу")}
@@ -178,7 +220,7 @@ function renderBug(bug, index) {
       <div class="idx">${index + 1}</div>
       <input class="title" id="title-bug-${index}" placeholder="Название бага" autocomplete="off"
              data-field-name="title" value="${escapeHtml(bug.title)}">
-      <button class="del" data-action="remove-item" aria-label="Удалить баг" title="Удалить баг"><span aria-hidden="true">×</span></button>
+      ${renderItemActions("bug")}
     </div>
 
     ${renderListRow(bug.tasks, "bug", index, "tasks", "Задачи", "Добавить задачу")}
