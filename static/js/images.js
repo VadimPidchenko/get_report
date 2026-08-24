@@ -178,12 +178,24 @@ async function removeImage(itemType, itemIndex, fieldName, imageIndex) {
 
   if (!draftId || !image) return;
 
+  // Дубликаты могут ссылаться на тот же физический файл. Удаляем файл только
+  // вместе с последней ссылкой внутри текущего черновика.
+  const isStillReferenced = [
+    ...currentDraft.cases.flatMap((testCase) => [
+      ...(testCase.expected_images || []),
+      ...(testCase.result_images || []),
+    ]),
+    ...currentDraft.bugs.flatMap((bug) => bug.images || []),
+  ].some((candidate) => candidate.file === image.file);
+
   let backup = null;
-  try {
-    const response = await api.deleteImage(draftId, image.file);
-    backup = response.data;
-  } catch (error) {
-    // файла уже нет — отменять нечего, уведомление всё равно покажем
+  if (!isStillReferenced) {
+    try {
+      const response = await api.deleteImage(draftId, image.file);
+      backup = response.data;
+    } catch (error) {
+      // файла уже нет — отменять нечего, уведомление всё равно покажем
+    }
   }
 
   showToast("Изображение удалено", {

@@ -1,7 +1,7 @@
 // Управление выпадающими списками проекта и статусов.
 
 import { byId } from "./dom.js";
-import { updateField } from "./editor.js";
+import { updateField, closeItemMenus } from "./editor.js";
 import { clearFieldError } from "./reports.js";
 import { statusClass } from "./render.js";
 import { closeDraftMenus } from "./drafts.js";
@@ -16,6 +16,8 @@ function openProjectDropdown() {
   const dropdown = byId("projectDropdown");
   if (!dropdown) return;
   closeStatusDropdowns();
+  closeDraftMenus();
+  closeItemMenus();
   dropdown.classList.add("open");
   byId("projectTrigger")?.setAttribute("aria-expanded", "true");
 }
@@ -112,6 +114,8 @@ function positionStatusDropdown(dropdown) {
 /** Открывает меню статуса и закрывает другое открытое меню. */
 function toggleStatusDropdown(dropdown) {
   closeProjectDropdown();
+  closeDraftMenus();
+  closeItemMenus();
   const willOpen = !dropdown.classList.contains("open");
   closeStatusDropdowns(dropdown);
   // Направление вычисляем ДО показа меню. Иначе при первом открытии меню успевает
@@ -141,6 +145,14 @@ function chooseStatus(itemType, itemIndex, status, option) {
 }
 
 export function initStatusDropdowns() {
+  // Меню карточек и отчётов не импортируют этот модуль напрямую: так они могут
+  // попросить закрыть конкурирующие popover-меню без циклических зависимостей.
+  document.addEventListener("app:close-competing-menus", () => {
+    closeStatusDropdowns();
+    closeProjectDropdown();
+    closeDraftMenus();
+  });
+
   const handleStatusClick = (event) => {
     const actionTarget = event.target.closest?.("[data-action]");
     if (!actionTarget) return;
@@ -175,16 +187,25 @@ export function initStatusDropdowns() {
     closeStatusDropdowns();
     closeProjectDropdown();
     closeDraftMenus();
+    closeItemMenus();
   });
 
-  // Открытый popover не должен висеть поверх footer при прокрутке/изменении viewport.
-  window.addEventListener("scroll", () => closeStatusDropdowns(), { passive: true });
-  window.addEventListener("resize", () => closeStatusDropdowns(), { passive: true });
+  // При прокрутке страницы меняется контекст: временные меню закрываем вместе.
+  // Scroll внутри самого списка опций до window не доходит и меню не прерывает.
+  const closeTransientMenus = () => {
+    closeStatusDropdowns();
+    closeProjectDropdown();
+    closeDraftMenus();
+    closeItemMenus();
+  };
+  window.addEventListener("scroll", closeTransientMenus, { passive: true });
+  window.addEventListener("resize", closeTransientMenus, { passive: true });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     const openStatus = document.querySelector(".status-dropdown.open");
     const openProject = byId("projectDropdown")?.classList.contains("open");
     const openDraftMenu = document.querySelector(".draft-menu.open");
+    const openItemMenu = document.querySelector(".item-menu.open");
     if (openStatus) {
       closeStatusDropdowns();
       openStatus.querySelector(".status-trigger")?.focus();
@@ -196,6 +217,11 @@ export function initStatusDropdowns() {
     if (openDraftMenu) {
       const trigger = openDraftMenu.closest(".draft-item")?.querySelector(".draft-menu-trigger");
       closeDraftMenus();
+      trigger?.focus();
+    }
+    if (openItemMenu) {
+      const trigger = openItemMenu.closest(".card")?.querySelector(".item-menu-trigger");
+      closeItemMenus();
       trigger?.focus();
     }
   });

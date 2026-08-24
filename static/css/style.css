@@ -542,7 +542,7 @@ header {
   flex-wrap: wrap;
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 30;
   backdrop-filter: blur(10px);
 }
 .head-left { display: flex; align-items: center; gap: 8px; width: 420px; min-height: 36px; flex-shrink: 0; }
@@ -798,29 +798,122 @@ header .meta { display: flex; gap: 14px; align-items: center; margin-left: auto;
 }
 
 .req-hint { font-size: 11px; color: #b7433d; margin: -10px 0 16px 44px; font-weight: 550; }
-.del {
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: background-color var(--motion-fast), color var(--motion-fast);
-}
-.card-head .del {
+.item-actions {
+  position: relative;
   width: 34px;
   height: 34px;
   flex: 0 0 34px;
   margin-left: 0;
+}
+.item-menu-trigger {
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 1px solid #e7ebf1;
   border-radius: 8px;
   background: #f7f9fc;
   color: #6f8096;
-  font-size: 19px;
-  font-weight: 500;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
 }
-.card-head .del:hover { border-color: #ead1ce; background: #fff6f5; color: #b5534d; }
-.card-head .del:active { background: #ffefed; color: #a94944; }
+.item-menu-trigger .dots-icon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.item-menu-trigger .dots-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: currentColor;
+}
+.item-menu-trigger:hover {
+  border-color: #c3cfe0;
+  background: #edf3ff;
+  color: #2f3d52;
+}
+.item-menu-trigger[aria-expanded="true"] {
+  border-color: #adc1e6;
+  background: #e1ebfc;
+  color: #2f3d52;
+}
+.item-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 182px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e0e5ec;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(31, 43, 61, .14), 0 2px 8px rgba(31, 43, 61, .06);
+  transform-origin: top right;
+}
+.item-menu.open { display: block; animation: draftMenuIn 140ms ease; }
+.item-menu button {
+  width: 100%;
+  min-height: 35px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #344154;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.25;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+.item-menu button:hover { background: #f3f5f8; }
+.item-menu button.danger { color: #bc514b; }
+.item-menu button.danger:hover { background: #fff3f2; color: #a9433e; }
+.item-menu .menu-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: grid;
+  place-items: center;
+  color: #7a8796;
+}
+.item-menu .menu-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.item-menu button.danger .menu-icon { color: currentColor; }
+.item-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: #edf0f4;
+}
+.card.menu-open {
+  position: relative;
+  z-index: 20;
+}
+.card.just-duplicated {
+  animation: duplicatedCardHighlight 1600ms var(--ease-ui);
+}
+.card {
+  scroll-margin-top: 112px;
+}
+@keyframes duplicatedCardHighlight {
+  0%, 28% { box-shadow: 0 0 0 3px rgba(50, 103, 214, .16); }
+  100% { box-shadow: 0 0 0 0 rgba(50, 103, 214, 0); }
+}
 
 .row {
   display: grid;

@@ -201,6 +201,30 @@ function updateItemCount(itemType) {
   if (counter) counter.textContent = itemsOf(itemType).length;
 }
 
+/** Закрывает все меню карточек, кроме переданного. */
+export function closeItemMenus(except = null) {
+  document.querySelectorAll(".item-menu.open").forEach((menu) => {
+    if (menu === except) return;
+    menu.classList.remove("open");
+    const card = menu.closest(".card");
+    card?.classList.remove("menu-open");
+    card?.querySelector(".item-menu-trigger")?.setAttribute("aria-expanded", "false");
+  });
+}
+
+function toggleItemMenu(trigger) {
+  const card = trigger.closest(".card");
+  const menu = card?.querySelector(".item-menu");
+  if (!menu) return;
+
+  const willOpen = !menu.classList.contains("open");
+  if (willOpen) document.dispatchEvent(new Event("app:close-competing-menus"));
+  closeItemMenus(menu);
+  menu.classList.toggle("open", willOpen);
+  card.classList.toggle("menu-open", willOpen);
+  trigger.setAttribute("aria-expanded", String(willOpen));
+}
+
 /**
  * После удаления карточки данные следующих элементов сдвигаются на один индекс.
  * Сами DOM-узлы оставляем на месте (особенно <img>), меняем только индексы в
@@ -310,6 +334,95 @@ function addItem(itemType) {
   scheduleSave();
 }
 
+const COPY_SUFFIX_PATTERN = /\s+\(копия(?:\s+\d+)?\)$/i;
+
+/** Подбирает понятное и уникальное название копии в текущем списке. */
+function copyTitle(itemType, sourceTitle) {
+  const value = String(sourceTitle || "").trim();
+  if (!value) return "";
+
+  const fieldName = itemType === "case" ? "name" : "title";
+  const base = value.replace(COPY_SUFFIX_PATTERN, "").trim();
+  const used = new Set(
+    itemsOf(itemType).map((item) => String(item[fieldName] || "").trim().toLocaleLowerCase("ru")),
+  );
+
+  let candidate = `${base} (копия)`;
+  let copyNumber = 2;
+  while (used.has(candidate.toLocaleLowerCase("ru"))) {
+    candidate = `${base} (копия ${copyNumber})`;
+    copyNumber += 1;
+  }
+  return candidate;
+}
+
+/** Показывает новую карточку и переводит пользователя к редактированию названия. */
+function revealDuplicatedCard(card) {
+  if (!card) return;
+
+  card.querySelectorAll("textarea").forEach((textarea) => autoGrowTextarea(textarea));
+  animateItemCard(card, "in").then(() => {
+    card.classList.add("just-duplicated");
+    setTimeout(() => card.classList.remove("just-duplicated"), 1600);
+
+    const title = card.querySelector("input.title");
+    title?.focus({ preventScroll: true });
+    card.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "start",
+    });
+  });
+}
+
+/** Дублирует кейс или баг и вставляет независимую копию сразу после оригинала. */
+function duplicateItem(itemType, itemIndex) {
+  const list = itemsOf(itemType);
+  const source = list[itemIndex];
+  if (!source) return;
+
+  // Данные черновика JSON-совместимы. Глубокая копия разделяет вложенные списки
+  // и подписи картинок, а сами неизменяемые файлы безопасно переиспользуются.
+  const copy = JSON.parse(JSON.stringify(source));
+  const titleField = itemType === "case" ? "name" : "title";
+  copy[titleField] = copyTitle(itemType, source[titleField]);
+
+  const insertIndex = itemIndex + 1;
+  list.splice(insertIndex, 0, copy);
+
+  const pane = paneFor(itemType);
+  const sourceCard = pane?.querySelector(
+    `.card[data-item-type="${itemType}"][data-item-index="${itemIndex}"]`,
+  );
+
+  if (!pane || !sourceCard) {
+    render();
+    revealDuplicatedCard(
+      paneFor(itemType)?.querySelector(
+        `.card[data-item-type="${itemType}"][data-item-index="${insertIndex}"]`,
+      ),
+    );
+  } else {
+    // Сдвигаем DOM-индексы с конца, чтобы временно не создавать одинаковые id.
+    const following = [...pane.querySelectorAll(`.card[data-item-type="${itemType}"]`)]
+      .filter((card) => Number(card.dataset.itemIndex) > itemIndex)
+      .sort((a, b) => Number(b.dataset.itemIndex) - Number(a.dataset.itemIndex));
+
+    following.forEach((card) => {
+      const oldIndex = Number(card.dataset.itemIndex);
+      reindexItemCard(card, itemType, oldIndex, oldIndex + 1);
+    });
+
+    sourceCard.insertAdjacentHTML("afterend", renderItemCard(itemType, copy, insertIndex));
+    revealDuplicatedCard(
+      pane.querySelector(`.card[data-item-type="${itemType}"][data-item-index="${insertIndex}"]`),
+    );
+  }
+
+  updateItemCount(itemType);
+  refreshDownloadButtons();
+  scheduleSave();
+}
+
 function removeItem(itemType, itemIndex) {
   const list = itemsOf(itemType);
   const item = list[itemIndex];
@@ -407,7 +520,20 @@ function handleEditorClick(event) {
   const itemType = card.dataset.itemType;
   const itemIndex = Number(card.dataset.itemIndex);
 
+  if (actionTarget.dataset.action === "toggle-item-menu") {
+    event.stopPropagation();
+    toggleItemMenu(actionTarget);
+    return;
+  }
+
+  if (actionTarget.dataset.action === "duplicate-item") {
+    closeItemMenus();
+    duplicateItem(itemType, itemIndex);
+    return;
+  }
+
   if (actionTarget.dataset.action === "remove-item") {
+    closeItemMenus();
     removeItem(itemType, itemIndex);
     return;
   }
@@ -433,6 +559,16 @@ function handleEditorClick(event) {
 /** Подключает единые обработчики ко всем текущим и будущим карточкам редактора. */
 export function initEditorEvents() {
   document.addEventListener("input", handleEditorInput);
+  document.addEventListener("click", () => closeItemMenus());
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const openMenu = document.querySelector(".item-menu.open");
+    if (!openMenu) return;
+    const trigger = openMenu.closest(".card")?.querySelector(".item-menu-trigger");
+    closeItemMenus();
+    trigger?.focus();
+  });
+  window.addEventListener("resize", () => closeItemMenus(), { passive: true });
   [byId("casesPane"), byId("bugsPane")].forEach((pane) => {
     pane.addEventListener("click", handleEditorClick);
   });
