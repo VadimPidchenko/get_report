@@ -282,8 +282,20 @@ export function renderItemCard(itemType, item, index) {
 
 export function renderEmptyState(kind) {
   const isCases = kind === "case";
+  const icon = isCases
+    ? `<svg class="empty-state-icon" viewBox="0 0 48 48" aria-hidden="true">
+        <rect x="11" y="8.5" width="26" height="32" rx="3"/>
+        <path d="M19 8.5v-2h10v2M17 19l2.5 2.5L24 17M27 20h5M17 29l2.5 2.5L24 27M27 30h5"/>
+      </svg>`
+    : `<svg class="empty-state-icon" viewBox="0 0 48 48" aria-hidden="true">
+        <g class="empty-state-icon-bug" transform="translate(24 24) scale(1.19) translate(-24 -24)">
+          <path d="M15 17h18v11a9 9 0 0 1-18 0V17ZM19 12.5a5 5 0 0 1 10 0V17M24 17v20"/>
+          <path d="M7 21h8M33 21h8M9 32l7-3M39 32l-7-3M10 12l6 5M38 12l-6 5"/>
+        </g>
+      </svg>`;
   return `
     <div class="empty-state" role="status">
+      ${icon}
       <div class="empty-title">${isCases ? "Нет тест-кейсов" : "Нет баг-репортов"}</div>
       <div class="empty-copy">${isCases
         ? "Добавьте первый кейс, чтобы начать формировать отчёт."

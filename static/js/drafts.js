@@ -177,12 +177,24 @@ export function closeDraftMenus() {
 export async function refreshDraftList() {
   const { drafts } = await api.fetchDraftList();
   const list = byId("draftList");
+  const count = byId("draftCount");
 
-  // на пустом списке ноль рядом с заголовком только шумит
-  byId("draftCount").textContent = drafts.length || "";
+  // На пустом списке badge целиком скрыт: пустой span всё равно рисовал кружок.
+  count.textContent = String(drafts.length);
+  count.hidden = !drafts.length;
+  list.classList.toggle("empty", !drafts.length);
 
   if (!drafts.length) {
-    list.innerHTML = `<div class="sidebar-empty">Пока нет сохранённых черновиков</div>`;
+    list.innerHTML = `
+      <div class="sidebar-empty">
+        <svg class="empty-state-icon" viewBox="0 0 48 48" aria-hidden="true">
+          <path d="M15.5 9.5h15l6 6v21a2.5 2.5 0 0 1-2.5 2.5H15.5A2.5 2.5 0 0 1 13 36.5V12a2.5 2.5 0 0 1 2.5-2.5Z"/>
+          <path d="M30.5 9.5v6h6M19 23h12M19 28h12M19 33h8"/>
+          <path class="empty-state-icon-muted" d="M10 14.5H8.5A2.5 2.5 0 0 0 6 17v21.5A2.5 2.5 0 0 0 8.5 41H29"/>
+        </svg>
+        <div class="empty-title">Пока нет сохранённых отчётов</div>
+        <div class="empty-copy">Создайте первый отчёт, чтобы начать работу.</div>
+      </div>`;
     return;
   }
 
