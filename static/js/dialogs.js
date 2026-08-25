@@ -5,6 +5,7 @@ import { byId } from "./dom.js";
 let activeResolve = null;
 let previousFocus = null;
 let shouldRestoreFocus = true;
+let activeDismissResult = null;
 
 const focusableSelector = [
   "button:not([disabled])",
@@ -25,7 +26,7 @@ function closeDialog(result) {
   layer().setAttribute("aria-hidden", "true");
 
   window.setTimeout(() => {
-    layer().classList.remove("open", "closing", "danger");
+    layer().classList.remove("open", "closing", "danger", "report-warning");
     document.body.classList.remove("dialog-open");
     if (shouldRestoreFocus) previousFocus?.focus?.({ preventScroll: true });
     else previousFocus?.blur?.();
@@ -40,7 +41,7 @@ function handleKeydown(event) {
 
   if (event.key === "Escape") {
     event.preventDefault();
-    closeDialog(null);
+    closeDialog(activeDismissResult);
     return;
   }
 
@@ -64,10 +65,18 @@ function handleKeydown(event) {
 function configure({
   title,
   description = "",
+  items = [],
+  note = "",
   value = "",
   inputLabel = "Название",
+  checkboxLabel = "",
+  cancelLabel = "Отмена",
   confirmLabel = "Сохранить",
+  cancelResult = null,
+  confirmResult = true,
+  dismissResult = null,
   danger = false,
+  variant = "default",
   input = true,
   required = false,
 }) {
@@ -75,21 +84,50 @@ function configure({
   byId("dialogDescription").textContent = description;
   byId("dialogDescription").hidden = !description;
 
+  const list = byId("dialogList");
+  list.replaceChildren();
+  items.forEach(({ label, text }) => {
+    const item = document.createElement("li");
+    const itemLabel = document.createElement("span");
+    const itemText = document.createElement("span");
+    itemLabel.textContent = label;
+    itemText.textContent = text;
+    item.append(itemLabel, itemText);
+    list.append(item);
+  });
+  list.hidden = items.length === 0;
+
+  byId("dialogNote").textContent = note;
+  byId("dialogNote").hidden = !note;
+
   byId("dialogField").hidden = !input;
   byId("dialogInputLabel").textContent = inputLabel;
   byId("dialogInput").value = value;
   byId("dialogInput").classList.remove("invalid");
   byId("dialogError").textContent = "";
 
+  const checkboxField = byId("dialogCheckboxField");
+  const checkbox = byId("dialogCheckbox");
+  checkboxField.hidden = !checkboxLabel;
+  byId("dialogCheckboxLabel").textContent = checkboxLabel;
+  checkbox.checked = false;
+
   const confirm = byId("dialogConfirm");
   confirm.textContent = confirmLabel;
   confirm.classList.toggle("danger", danger);
+  byId("dialogCancel").textContent = cancelLabel;
 
   layer().classList.toggle("danger", danger);
+  layer().classList.toggle("report-warning", variant === "report-warning");
+  activeDismissResult = dismissResult;
+
+  const explicitResult = (action) => checkboxLabel
+    ? { action, checkboxChecked: checkbox.checked }
+    : action;
 
   confirm.onclick = () => {
     if (!input) {
-      closeDialog(true);
+      closeDialog(explicitResult(confirmResult));
       return;
     }
 
@@ -103,8 +141,8 @@ function configure({
     closeDialog(text);
   };
 
-  byId("dialogCancel").onclick = () => closeDialog(null);
-  layer().querySelector("[data-dialog-cancel]").onclick = () => closeDialog(null);
+  byId("dialogCancel").onclick = () => closeDialog(explicitResult(cancelResult));
+  layer().querySelector("[data-dialog-cancel]").onclick = () => closeDialog(activeDismissResult);
 
   byId("dialogInput").oninput = () => {
     byId("dialogInput").classList.remove("invalid");

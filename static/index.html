@@ -86,12 +86,18 @@
     <div class="dialog-copy">
       <h3 id="dialogTitle"></h3>
       <p id="dialogDescription"></p>
+      <ul class="dialog-list" id="dialogList" hidden></ul>
+      <p class="dialog-note" id="dialogNote" hidden></p>
     </div>
     <div class="dialog-field" id="dialogField">
       <label for="dialogInput" id="dialogInputLabel">Название</label>
       <input id="dialogInput" type="text" autocomplete="off">
       <div class="dialog-error" id="dialogError" aria-live="polite"></div>
     </div>
+    <label class="dialog-checkbox" id="dialogCheckboxField" hidden>
+      <input id="dialogCheckbox" type="checkbox">
+      <span id="dialogCheckboxLabel"></span>
+    </label>
     <div class="dialog-actions">
       <button type="button" class="btn secondary" id="dialogCancel">Отмена</button>
       <button type="button" class="btn" id="dialogConfirm">Сохранить</button>

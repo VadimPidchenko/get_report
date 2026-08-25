@@ -7,14 +7,18 @@
 import * as api from "./api.js";
 import { byId } from "./dom.js";
 import { currentDraft } from "./state.js";
-import { saveNow } from "./draft-persistence.js";
+import { saveNow, scheduleSave } from "./draft-persistence.js";
 import { setStatusMessage, showToast } from "./notifications.js";
+import { confirmAction } from "./dialogs.js";
 
 const VALIDATION_MESSAGE_TIMEOUT_MS = 4500;
 const SCROLL_FOCUS_DELAY_MS = 360;
 const TITLE_ERROR_VIEWPORT_RATIO = 0.25;
 const EXPECTED_ERROR_VIEWPORT_RATIO = 0.45;
 const STATUS_ERROR_VIEWPORT_RATIO = 0.68;
+const RESULT_WARNING_VIEWPORT_RATIO = 0.45;
+const RESULT_WARNING_HIGHLIGHT_MS = 1800;
+const SKIP_FAILED_RESULTS_WARNING = "skip_failed_results_warning";
 const REPORT_DATE_PATTERN = /^(\d{2})\.(\d{2})\.(\d{4})$/;
 
 const downloadButtons = () => [byId("dlDocx"), byId("dlPdf")];
@@ -181,9 +185,28 @@ export function collectRequiredFieldProblems(draft = currentDraft) {
   return problems;
 }
 
+/** Failed-кейсы, в которых фактический результат никак не зафиксирован. */
+export function collectFailedCasesWithoutResults(draft = currentDraft) {
+  return draft.cases.reduce((problems, testCase, index) => {
+    const hasTextResult = hasFilledListValue(testCase.result);
+    const hasResultImage = Array.isArray(testCase.result_images) && testCase.result_images.length > 0;
+
+    if (testCase.status === "Failed" && !hasTextResult && !hasResultImage) {
+      problems.push({ index, name: String(testCase.name || "").trim() });
+    }
+    return problems;
+  }, []);
+}
+
 function expectedFieldFor(itemIndex) {
   return document.querySelector(
     `.list-field[data-item-type="case"][data-item-index="${itemIndex}"][data-field-name="expected"]`,
+  );
+}
+
+function resultFieldFor(itemIndex) {
+  return document.querySelector(
+    `.list-field[data-item-type="case"][data-item-index="${itemIndex}"][data-field-name="result"]`,
   );
 }
 
@@ -291,6 +314,81 @@ function highlightRequiredFields(problemsByTab) {
   return true;
 }
 
+/** Возвращает пользователя к первому кейсу из предупреждения. */
+function revealFirstMissingResult(problem) {
+  const activeTab = document.querySelector(".tab.active")?.dataset.tab || "cases";
+  if (activeTab !== "cases") document.querySelector('.tab[data-tab="cases"]')?.click();
+
+  const field = resultFieldFor(problem.index);
+  if (!field) return;
+
+  field.classList.remove("result-warning-focus");
+  void field.offsetWidth;
+  field.classList.add("result-warning-focus");
+  window.setTimeout(() => field.classList.remove("result-warning-focus"), RESULT_WARNING_HIGHLIGHT_MS);
+
+  scrollProblemIntoView({
+    container: field,
+    focusTarget: field.querySelector("textarea"),
+    viewportRatio: RESULT_WARNING_VIEWPORT_RATIO,
+  });
+}
+
+/**
+ * Предупреждает о Failed-кейсах без фактического результата.
+ * Это не блокирующая ошибка: пользователь может продолжить выбранную загрузку.
+ */
+async function confirmMissingFailedResults(outputFormat) {
+  if (currentDraft._preferences?.[SKIP_FAILED_RESULTS_WARNING] === true) return true;
+
+  const problems = collectFailedCasesWithoutResults();
+  if (!problems.length) return true;
+
+  const plural = problems.length > 1;
+  const decision = await confirmAction({
+    title: plural
+      ? "Для Failed-кейсов нет результатов тестирования"
+      : "Для Failed-кейса нет результата тестирования",
+    description: plural
+      ? "Статус Failed показывает, что тест не пройден. В кейсах ниже нет ни результатов тестирования, ни изображений, поэтому из отчёта будет непонятно, почему тесты не пройдены и каковы их фактические результаты:"
+      : "Статус Failed показывает, что тест не пройден. В кейсе ниже нет ни результата тестирования, ни изображения, поэтому из отчёта будет непонятно, почему тест не пройден и каков его фактический результат:",
+    items: problems.map((problem) => ({
+      label: `№${problem.index + 1}`,
+      text: problem.name,
+    })),
+    note: plural
+      ? "Вы можете вернуться и дополнить кейсы или скачать отчёт без этих данных."
+      : "Вы можете вернуться и дополнить кейс или скачать отчёт без этих данных.",
+    checkboxLabel: "Больше не показывать для этого отчёта",
+    cancelLabel: "Вернуться к отчёту",
+    confirmLabel: `Всё равно скачать ${outputFormat.toUpperCase()}`,
+    cancelResult: "return",
+    confirmResult: "download",
+    dismissResult: null,
+    danger: false,
+    variant: "report-warning",
+    restoreFocus: false,
+  });
+
+  // Escape и клик по фону только закрывают окно: без сохранения настройки,
+  // прокрутки и подсветки.
+  if (!decision) return false;
+
+  if (decision.checkboxChecked) {
+    currentDraft._preferences = {
+      ...(currentDraft._preferences || {}),
+      [SKIP_FAILED_RESULTS_WARNING]: true,
+    };
+    scheduleSave();
+  }
+
+  if (decision.action === "return") {
+    revealFirstMissingResult(problems[0]);
+    return false;
+  }
+  return decision.action === "download";
+}
+
 /** Отдаёт файл браузеру через скрытую ссылку. */
 function triggerDownload(url) {
   const link = document.createElement("a");
@@ -314,6 +412,7 @@ async function downloadReport(outputFormat, button) {
 
   const requiredFieldProblems = collectRequiredFieldProblems();
   if (highlightRequiredFields(requiredFieldProblems)) return;
+  if (!await confirmMissingFailedResults(outputFormat)) return;
 
   const originalLabel = button.textContent;
   setButtonsBusy(true);
