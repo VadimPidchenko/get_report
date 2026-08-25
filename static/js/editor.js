@@ -32,6 +32,7 @@ function rerenderListField(itemType, itemIndex, fieldName) {
   }
 
   const addLabel = field.dataset.addLabel || "Добавить пункт";
+  const wasInvalid = field.classList.contains("invalid");
   field.outerHTML = renderListField(
     itemsOf(itemType)[itemIndex][fieldName],
     itemType,
@@ -39,6 +40,12 @@ function rerenderListField(itemType, itemIndex, fieldName) {
     fieldName,
     addLabel,
   );
+
+  if (wasInvalid) {
+    const replacement = document.querySelector(selector);
+    replacement?.classList.add("invalid");
+    replacement?.setAttribute("aria-invalid", "true");
+  }
 }
 
 function addListItem(itemType, itemIndex, fieldName) {
@@ -243,6 +250,11 @@ function reindexItemCard(card, itemType, oldIndex, newIndex) {
     `.req-hint[data-error-for="title-${itemType}-${oldIndex}"]`,
   );
   if (titleHint) titleHint.dataset.errorFor = `title-${itemType}-${newIndex}`;
+
+  const expectedHint = card.querySelector(
+    `.req-hint[data-error-for="expected-${itemType}-${oldIndex}"]`,
+  );
+  if (expectedHint) expectedHint.dataset.errorFor = `expected-${itemType}-${newIndex}`;
 
   const status = card.querySelector(`#status-${itemType}-${oldIndex}`);
   if (status) status.id = `status-${itemType}-${newIndex}`;

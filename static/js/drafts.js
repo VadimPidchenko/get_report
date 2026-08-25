@@ -275,7 +275,10 @@ async function startNewDraft() {
 /** Обновляет название текущего черновика через общую очередь сохранения. */
 async function saveCurrentDraftTitle(title) {
   currentDraft._title = title;
-  byId("draftName").textContent = title;
+  const draftName = byId("draftName");
+  draftName.textContent = title;
+  draftName.classList.remove("invalid");
+  draftName.removeAttribute("aria-invalid");
 
   try {
     await saveNow();
