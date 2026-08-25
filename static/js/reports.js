@@ -1,19 +1,25 @@
 // Скачивание отчёта и проверка обязательных полей перед сборкой.
 //
 // Кнопки заблокированы, пока в черновике нет ни одного кейса — скачивать нечего.
-// Незаполненные названия кнопки не блокируют: о них сообщаем при нажатии,
-// подсвечивая проблемные карточки.
+// Незаполненные обязательные поля кнопки не блокируют: о них сообщаем при
+// нажатии, подсвечивая проблемные места и не запуская сборку.
 
 import * as api from "./api.js";
 import { byId } from "./dom.js";
 import { currentDraft } from "./state.js";
-import { saveNow } from "./draft-persistence.js";
+import { saveNow, scheduleSave } from "./draft-persistence.js";
 import { setStatusMessage, showToast } from "./notifications.js";
+import { confirmAction } from "./dialogs.js";
 
 const VALIDATION_MESSAGE_TIMEOUT_MS = 4500;
 const SCROLL_FOCUS_DELAY_MS = 360;
 const TITLE_ERROR_VIEWPORT_RATIO = 0.25;
+const EXPECTED_ERROR_VIEWPORT_RATIO = 0.45;
 const STATUS_ERROR_VIEWPORT_RATIO = 0.68;
+const RESULT_WARNING_VIEWPORT_RATIO = 0.45;
+const RESULT_WARNING_HIGHLIGHT_MS = 1800;
+const SKIP_FAILED_RESULTS_WARNING = "skip_failed_results_warning";
+const REPORT_DATE_PATTERN = /^(\d{2})\.(\d{2})\.(\d{4})$/;
 
 const downloadButtons = () => [byId("dlDocx"), byId("dlPdf")];
 
@@ -34,14 +40,56 @@ export function refreshDownloadButtons() {
 /** Снимает подсветку с исправленного поля. */
 export function clearFieldError(input) {
   input.classList.remove("invalid");
+  input.removeAttribute("aria-invalid");
   if (input.id === "projectDropdown") byId("project")?.classList.remove("invalid");
   input.closest?.(".card")?.querySelector(`.req-hint[data-error-for="${input.id}"]`)?.remove();
 }
 
-/** Снимает ошибку обязательного названия при вводе и для будущих карточек. */
+function hasFilledListValue(values) {
+  const items = Array.isArray(values) ? values : [values];
+  return items.some((value) => String(value || "").trim());
+}
+
+/** Проверяет формат и календарную корректность даты отчёта. */
+export function isValidReportDate(value) {
+  const match = REPORT_DATE_PATTERN.exec(String(value || "").trim());
+  if (!match) return false;
+
+  const [, dayText, monthText, yearText] = match;
+  const day = Number(dayText);
+  const month = Number(monthText);
+  const year = Number(yearText);
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false;
+
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= daysInMonth[month - 1];
+}
+
+function clearExpectedError(field) {
+  field.classList.remove("invalid");
+  field.removeAttribute("aria-invalid");
+  const card = field.closest(".card");
+  const key = `expected-case-${field.dataset.itemIndex}`;
+  card?.querySelector(`.req-hint[data-error-for="${key}"]`)?.remove();
+}
+
+/** Снимает подсветку обязательного поля сразу после корректного заполнения. */
 export function initValidationEvents() {
   document.addEventListener("input", (event) => {
     if (event.target.matches?.(".card-head .title")) clearFieldError(event.target);
+
+    if (event.target.id === "date" && isValidReportDate(event.target.value)) {
+      clearFieldError(event.target);
+    }
+
+    const expectedField = event.target.closest?.(
+      '.list-field[data-item-type="case"][data-field-name="expected"]',
+    );
+    if (!expectedField) return;
+
+    const testCase = currentDraft.cases[Number(expectedField.dataset.itemIndex)];
+    if (hasFilledListValue(testCase?.expected)) clearExpectedError(expectedField);
   });
 }
 
@@ -50,8 +98,9 @@ function markFieldInvalid(itemType, itemIndex) {
   if (!input) return;
 
   input.classList.add("invalid");
+  input.setAttribute("aria-invalid", "true");
   const head = input.closest(".card-head");
-  if (head && !head.parentElement.querySelector(".req-hint")) {
+  if (head && !head.parentElement.querySelector(`.req-hint[data-error-for="${input.id}"]`)) {
     const hint = document.createElement("div");
     hint.className = "req-hint";
     hint.dataset.errorFor = input.id;
@@ -76,25 +125,55 @@ function validateProject() {
 
   const dropdown = byId("projectDropdown");
   dropdown.classList.add("invalid");
+  dropdown.setAttribute("aria-invalid", "true");
   byId("projectTrigger")?.focus();
   setProblemMessage("Выберите проект");
   return false;
 }
 
+/** Название редактируется существующим диалогом из кликабельной шапки. */
+function validateReportTitle() {
+  if (String(currentDraft._title || "").trim()) return true;
+
+  const draftName = byId("draftName");
+  draftName.classList.add("invalid");
+  draftName.setAttribute("aria-invalid", "true");
+  setProblemMessage("Укажите название отчёта");
+  draftName.click();
+  return false;
+}
+
+function validateReportDate() {
+  const input = byId("date");
+  if (isValidReportDate(input.value)) return true;
+
+  input.classList.add("invalid");
+  input.setAttribute("aria-invalid", "true");
+  input.focus();
+  const message = String(input.value || "").trim()
+    ? "Укажите корректную дату в формате ДД.ММ.ГГГГ"
+    : "Укажите дату отчёта";
+  setProblemMessage(message);
+  return false;
+}
+
 /** Собирает обязательные поля, которые не заполнены, отдельно по вкладкам. */
-function collectRequiredFieldProblems() {
+export function collectRequiredFieldProblems(draft = currentDraft) {
   const problems = { cases: [], bugs: [] };
 
-  currentDraft.cases.forEach((testCase, index) => {
+  draft.cases.forEach((testCase, index) => {
     if (!String(testCase.name || "").trim()) {
       problems.cases.push({ kind: "title", itemType: "case", index });
+    }
+    if (!hasFilledListValue(testCase.expected)) {
+      problems.cases.push({ kind: "expected", itemType: "case", index });
     }
     if (!String(testCase.status || "").trim()) {
       problems.cases.push({ kind: "status", itemType: "case", index });
     }
   });
 
-  currentDraft.bugs.forEach((bug, index) => {
+  draft.bugs.forEach((bug, index) => {
     if (!String(bug.title || "").trim()) {
       problems.bugs.push({ kind: "title", itemType: "bug", index });
     }
@@ -106,10 +185,44 @@ function collectRequiredFieldProblems() {
   return problems;
 }
 
+/** Failed-кейсы, в которых фактический результат никак не зафиксирован. */
+export function collectFailedCasesWithoutResults(draft = currentDraft) {
+  return draft.cases.reduce((problems, testCase, index) => {
+    const hasTextResult = hasFilledListValue(testCase.result);
+    const hasResultImage = Array.isArray(testCase.result_images) && testCase.result_images.length > 0;
+
+    if (testCase.status === "Failed" && !hasTextResult && !hasResultImage) {
+      problems.push({ index, name: String(testCase.name || "").trim() });
+    }
+    return problems;
+  }, []);
+}
+
+function expectedFieldFor(itemIndex) {
+  return document.querySelector(
+    `.list-field[data-item-type="case"][data-item-index="${itemIndex}"][data-field-name="expected"]`,
+  );
+}
+
+function resultFieldFor(itemIndex) {
+  return document.querySelector(
+    `.list-field[data-item-type="case"][data-item-index="${itemIndex}"][data-field-name="result"]`,
+  );
+}
+
 function targetForProblem(problem) {
   if (problem.kind === "title") {
     const input = byId(`title-${problem.itemType}-${problem.index}`);
     return { container: input, focusTarget: input, viewportRatio: TITLE_ERROR_VIEWPORT_RATIO };
+  }
+
+  if (problem.kind === "expected") {
+    const field = expectedFieldFor(problem.index);
+    return {
+      container: field,
+      focusTarget: field?.querySelector("textarea"),
+      viewportRatio: EXPECTED_ERROR_VIEWPORT_RATIO,
+    };
   }
 
   const dropdown = byId(`status-${problem.itemType}-${problem.index}`);
@@ -149,13 +262,33 @@ function markProblemInvalid(problem) {
     markFieldInvalid(problem.itemType, problem.index);
     return;
   }
-  byId(`status-${problem.itemType}-${problem.index}`)?.classList.add("invalid");
+
+  if (problem.kind === "expected") {
+    const field = expectedFieldFor(problem.index);
+    if (!field) return;
+
+    field.classList.add("invalid");
+    field.setAttribute("aria-invalid", "true");
+    const key = `expected-case-${problem.index}`;
+    if (!field.parentElement.querySelector(`.req-hint[data-error-for="${key}"]`)) {
+      const hint = document.createElement("div");
+      hint.className = "req-hint list-req-hint";
+      hint.dataset.errorFor = key;
+      hint.textContent = "Обязательное поле";
+      field.insertAdjacentElement("afterend", hint);
+    }
+    return;
+  }
+
+  const dropdown = byId(`status-${problem.itemType}-${problem.index}`);
+  dropdown?.classList.add("invalid");
+  dropdown?.setAttribute("aria-invalid", "true");
 }
 
 /**
  * Показывает ошибки только на одной вкладке за попытку генерации.
  * Если на текущей вкладке есть ошибки — остаёмся на ней и показываем их все
- * (и названия, и статусы). На другую вкладку переходим только после того,
+ * (названия, ожидаемые результаты и статусы). На другую вкладку переходим только после того,
  * как текущая исправлена. Так validation не "мотает" пользователя туда-сюда.
  */
 function highlightRequiredFields(problemsByTab) {
@@ -181,6 +314,81 @@ function highlightRequiredFields(problemsByTab) {
   return true;
 }
 
+/** Возвращает пользователя к первому кейсу из предупреждения. */
+function revealFirstMissingResult(problem) {
+  const activeTab = document.querySelector(".tab.active")?.dataset.tab || "cases";
+  if (activeTab !== "cases") document.querySelector('.tab[data-tab="cases"]')?.click();
+
+  const field = resultFieldFor(problem.index);
+  if (!field) return;
+
+  field.classList.remove("result-warning-focus");
+  void field.offsetWidth;
+  field.classList.add("result-warning-focus");
+  window.setTimeout(() => field.classList.remove("result-warning-focus"), RESULT_WARNING_HIGHLIGHT_MS);
+
+  scrollProblemIntoView({
+    container: field,
+    focusTarget: field.querySelector("textarea"),
+    viewportRatio: RESULT_WARNING_VIEWPORT_RATIO,
+  });
+}
+
+/**
+ * Предупреждает о Failed-кейсах без фактического результата.
+ * Это не блокирующая ошибка: пользователь может продолжить выбранную загрузку.
+ */
+async function confirmMissingFailedResults(outputFormat) {
+  if (currentDraft._preferences?.[SKIP_FAILED_RESULTS_WARNING] === true) return true;
+
+  const problems = collectFailedCasesWithoutResults();
+  if (!problems.length) return true;
+
+  const plural = problems.length > 1;
+  const decision = await confirmAction({
+    title: plural
+      ? "Для Failed-кейсов нет результатов тестирования"
+      : "Для Failed-кейса нет результата тестирования",
+    description: plural
+      ? "Статус Failed показывает, что тест не пройден. В кейсах ниже нет ни результатов тестирования, ни изображений, поэтому из отчёта будет непонятно, почему тесты не пройдены и каковы их фактические результаты:"
+      : "Статус Failed показывает, что тест не пройден. В кейсе ниже нет ни результата тестирования, ни изображения, поэтому из отчёта будет непонятно, почему тест не пройден и каков его фактический результат:",
+    items: problems.map((problem) => ({
+      label: `№${problem.index + 1}`,
+      text: problem.name,
+    })),
+    note: plural
+      ? "Вы можете вернуться и дополнить кейсы или скачать отчёт без этих данных."
+      : "Вы можете вернуться и дополнить кейс или скачать отчёт без этих данных.",
+    checkboxLabel: "Больше не показывать для этого отчёта",
+    cancelLabel: "Вернуться к отчёту",
+    confirmLabel: `Всё равно скачать ${outputFormat.toUpperCase()}`,
+    cancelResult: "return",
+    confirmResult: "download",
+    dismissResult: null,
+    danger: false,
+    variant: "report-warning",
+    restoreFocus: false,
+  });
+
+  // Escape и клик по фону только закрывают окно: без сохранения настройки,
+  // прокрутки и подсветки.
+  if (!decision) return false;
+
+  if (decision.checkboxChecked) {
+    currentDraft._preferences = {
+      ...(currentDraft._preferences || {}),
+      [SKIP_FAILED_RESULTS_WARNING]: true,
+    };
+    scheduleSave();
+  }
+
+  if (decision.action === "return") {
+    revealFirstMissingResult(problems[0]);
+    return false;
+  }
+  return decision.action === "download";
+}
+
 /** Отдаёт файл браузеру через скрытую ссылку. */
 function triggerDownload(url) {
   const link = document.createElement("a");
@@ -196,12 +404,15 @@ function triggerDownload(url) {
  * Сборка идёт на сервере; если черновик не менялся, файл придёт из кеша.
  */
 async function downloadReport(outputFormat, button) {
-  // проект проверяем первым: он в шапке и виден всегда,
-  // а названия кейсов могут потребовать переключения вкладки
+  // Поля шапки проверяем первыми: они видны всегда, а ошибки карточек могут
+  // потребовать переключения вкладки и прокрутки.
   if (!validateProject()) return;
+  if (!validateReportTitle()) return;
+  if (!validateReportDate()) return;
 
   const requiredFieldProblems = collectRequiredFieldProblems();
   if (highlightRequiredFields(requiredFieldProblems)) return;
+  if (!await confirmMissingFailedResults(outputFormat)) return;
 
   const originalLabel = button.textContent;
   setButtonsBusy(true);

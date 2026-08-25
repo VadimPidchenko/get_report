@@ -85,7 +85,10 @@ async function persistDraft(draft, generation) {
 
     if (draft === currentDraft) {
       rememberOpenDraft(id);
-      byId("draftName").textContent = title;
+      const draftName = byId("draftName");
+      draftName.textContent = title;
+      draftName.classList.remove("invalid");
+      draftName.removeAttribute("aria-invalid");
       setSaveStatus("сохранено ✓", { fade: true });
     }
 
