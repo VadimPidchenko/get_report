@@ -10,7 +10,7 @@ import { currentDraft } from "./state.js";
 import { saveNow, scheduleSave } from "./draft-persistence.js";
 import { setStatusMessage, showToast } from "./notifications.js";
 import { confirmAction } from "./dialogs.js";
-import { getSelectedReportFormat } from "./report-panel.js";
+import { getSelectedReportFormat } from "./report-panel.js?v=report-statistics-2";
 
 const VALIDATION_MESSAGE_TIMEOUT_MS = 4500;
 const SCROLL_FOCUS_DELAY_MS = 360;

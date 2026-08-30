@@ -1,7 +1,7 @@
 // Управление выпадающими списками проекта и статусов.
 
 import { byId } from "./dom.js";
-import { updateField, closeItemMenus } from "./editor.js";
+import { updateField, closeItemMenus } from "./editor.js?v=card-navigation-1";
 import { clearFieldError } from "./reports.js";
 import { statusClass } from "./render.js";
 import { closeDraftMenus } from "./drafts.js";

@@ -24,6 +24,7 @@ const SPACING = {
   afterImageWithoutCaption: 140, // между картинками без подписей
   beforeFirstImage: 200, // между заголовком и первой картинкой
   beforeNextImage: 60, // между соседними картинками
+  beforeBugReport: 360, // увеличенный интервал между соседними баг-репортами (18pt)
   afterStatus: 240, // под строкой статуса
   afterCaption: 160, // под подписью к картинке
 };

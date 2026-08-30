@@ -3,9 +3,20 @@
 import { byId, pluralize } from "./dom.js";
 import { currentDraft } from "./state.js";
 import { scheduleSave } from "./draft-persistence.js";
+import { setStatusMessage } from "./notifications.js";
+import {
+  clearCardHighlight,
+  getHighlightedCard,
+  highlightCard as highlightNavigatedCard,
+  scrollCardIntoView,
+} from "./card-navigation.js";
 
 const PANEL_OPEN_CLASS = "report-panel-open";
 const PANEL_TRANSITION_MS = 260;
+
+let navigationDraft = null;
+const lastStatusTargets = new Map();
+let highlightedTarget = null;
 
 const formatLabel = (format) => `Сформировать и скачать ${format.toUpperCase()}`;
 
@@ -44,8 +55,96 @@ function toggleReportPanel() {
   else openReportPanel();
 }
 
-function countLabel(count, words) {
-  return `${count} ${pluralize(count, ...words)}`;
+function statusNavigationKey(itemType, status) {
+  return `${itemType}:${status || "none"}`;
+}
+
+function updateStatusIndicator(id, count, itemType, statusLabel) {
+  const value = byId(id);
+  const button = value?.closest("[data-status-value]");
+  if (!value || !button) return;
+
+  value.textContent = count;
+  button.disabled = count === 0;
+  const itemLabel = itemType === "case"
+    ? pluralize(count, "тест-кейс", "тест-кейса", "тест-кейсов")
+    : pluralize(count, "баг-репорт", "баг-репорта", "баг-репортов");
+  const emptyItemLabel = itemType === "case" ? "тест-кейсов" : "баг-репортов";
+  button.setAttribute(
+    "aria-label",
+    count
+      ? `${statusLabel}: ${count} ${itemLabel}. Перейти к следующему`
+      : `${statusLabel}: подходящих ${emptyItemLabel} нет`,
+  );
+}
+
+function clearHighlightedCard() {
+  clearCardHighlight();
+  highlightedTarget = null;
+}
+
+function highlightCard(card, itemType, item, status) {
+  clearHighlightedCard();
+
+  highlightedTarget = { itemType, item, status, card };
+  highlightNavigatedCard(card);
+}
+
+function clearStaleHighlight() {
+  if (!highlightedTarget) return;
+
+  if (getHighlightedCard() !== highlightedTarget.card) {
+    highlightedTarget = null;
+    return;
+  }
+
+  const items = highlightedTarget.itemType === "case"
+    ? currentDraft.cases
+    : currentDraft.bugs;
+  const stillMatches = items.includes(highlightedTarget.item)
+    && (highlightedTarget.item.status || "") === highlightedTarget.status;
+  if (!stillMatches) clearHighlightedCard();
+}
+
+function navigateToStatus(itemType, status, statusLabel, button) {
+  if (navigationDraft !== currentDraft) {
+    navigationDraft = currentDraft;
+    lastStatusTargets.clear();
+  }
+
+  const items = itemType === "case" ? currentDraft.cases : currentDraft.bugs;
+  const matches = items.filter((item) => (item.status || "") === status);
+  if (!matches.length) {
+    button.disabled = true;
+    const itemLabel = itemType === "case" ? "Тест-кейсов" : "Баг-репортов";
+    setStatusMessage(`${itemLabel} со статусом ${statusLabel} нет`, 3000);
+    return;
+  }
+
+  const key = statusNavigationKey(itemType, status);
+  const lastTarget = lastStatusTargets.get(key);
+  const lastIndex = matches.indexOf(lastTarget);
+  const targetItem = matches[(lastIndex + 1) % matches.length];
+  lastStatusTargets.set(key, targetItem);
+
+  const targetIndex = items.indexOf(targetItem);
+  const targetTab = itemType === "case" ? "cases" : "bugs";
+  const activeTab = document.querySelector(".tab.active")?.dataset.tab;
+  if (activeTab !== targetTab) {
+    document.querySelector(`.tab[data-tab="${targetTab}"]`)?.click();
+  }
+
+  const card = document.querySelector(
+    `.card[data-item-type="${itemType}"][data-item-index="${targetIndex}"]`,
+  );
+  if (!card) {
+    setStatusMessage("Не удалось найти карточку. Обновите страницу и повторите попытку", 3000);
+    return;
+  }
+
+  highlightCard(card, itemType, targetItem, status);
+  scrollCardIntoView(card);
+  button.focus({ preventScroll: true });
 }
 
 function selectCompositionTab(name) {
@@ -63,6 +162,14 @@ function selectCompositionTab(name) {
 /** Обновляет пассивный контекст и статистику под текущее состояние черновика. */
 export function refreshReportPanel() {
   if (!currentDraft) return;
+
+  if (navigationDraft && navigationDraft !== currentDraft) {
+    navigationDraft = currentDraft;
+    lastStatusTargets.clear();
+    clearHighlightedCard();
+  } else {
+    clearStaleHighlight();
+  }
 
   byId("contextProject").textContent = currentDraft.project || "No project";
   byId("contextDate").textContent = currentDraft.date || "Дата не указана";
@@ -95,18 +202,16 @@ export function refreshReportPanel() {
 
   byId("compositionCasesCount").textContent = cases.length;
   byId("compositionBugsCount").textContent = bugs.length;
-  byId("compositionCasesTotal").textContent = countLabel(cases.length, ["тест-кейс", "тест-кейса", "тест-кейсов"]);
-  byId("compositionBugsTotal").textContent = countLabel(bugs.length, ["баг-репорт", "баг-репорта", "баг-репортов"]);
-  byId("statPassed").textContent = statusCounts.Passed;
-  byId("statFailed").textContent = statusCounts.Failed;
-  byId("statBlocked").textContent = statusCounts.Blocked;
-  byId("statSkipped").textContent = statusCounts.Skipped;
-  byId("statNone").textContent = statusCounts.none;
-  byId("statBugDone").textContent = bugStatusCounts.Done;
-  byId("statBugInProgress").textContent = bugStatusCounts["In Progress"];
-  byId("statBugToDo").textContent = bugStatusCounts["To Do"];
-  byId("statBugBacklog").textContent = bugStatusCounts.Backlog;
-  byId("statBugNone").textContent = bugStatusCounts.none;
+  updateStatusIndicator("statPassed", statusCounts.Passed, "case", "Passed");
+  updateStatusIndicator("statFailed", statusCounts.Failed, "case", "Failed");
+  updateStatusIndicator("statBlocked", statusCounts.Blocked, "case", "Blocked");
+  updateStatusIndicator("statSkipped", statusCounts.Skipped, "case", "Skipped");
+  updateStatusIndicator("statNone", statusCounts.none, "case", "No status");
+  updateStatusIndicator("statBugDone", bugStatusCounts.Done, "bug", "Done");
+  updateStatusIndicator("statBugInProgress", bugStatusCounts["In Progress"], "bug", "In Progress");
+  updateStatusIndicator("statBugToDo", bugStatusCounts["To Do"], "bug", "To Do");
+  updateStatusIndicator("statBugBacklog", bugStatusCounts.Backlog, "bug", "Backlog");
+  updateStatusIndicator("statBugNone", bugStatusCounts.none, "bug", "No status");
 }
 
 function syncFormatLabel() {
@@ -130,6 +235,17 @@ export function initReportPanel() {
   byId("reportTitle").addEventListener("input", (event) => updateTitle(event.target.value));
   byId("reportFormatFields").addEventListener("change", syncFormatLabel);
   byId("reportCompositionControls").addEventListener("click", (event) => {
+    const statusButton = event.target.closest("[data-status-value]");
+    if (statusButton) {
+      navigateToStatus(
+        statusButton.dataset.statusItemType,
+        statusButton.dataset.statusValue,
+        statusButton.dataset.statusLabel,
+        statusButton,
+      );
+      return;
+    }
+
     const tab = event.target.closest("[data-composition-tab]");
     if (tab) selectCompositionTab(tab.dataset.compositionTab);
   });
@@ -151,9 +267,12 @@ export function initReportPanel() {
     openReportPanel({ focusTitle: event.detail?.focus === "title" });
   });
   document.addEventListener("app:close-report-panel", () => closeReportPanel());
+  document.addEventListener("pointerdown", clearHighlightedCard);
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || !document.body.classList.contains(PANEL_OPEN_CLASS)) return;
+    if (event.key !== "Escape") return;
+    clearHighlightedCard();
+    if (!document.body.classList.contains(PANEL_OPEN_CLASS)) return;
     if (byId("reportPanelClose").disabled) return;
     if (document.querySelector(".dialog-layer.open, .project-dropdown.open, .status-dropdown.open")) return;
     closeReportPanel({ restoreFocus: true });

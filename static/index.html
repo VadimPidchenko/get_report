@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Report Builder</title>
-  <link rel="stylesheet" href="css/style.css?v=header-panel-1">
+  <link rel="stylesheet" href="css/style.css?v=report-statistics-3">
 </head>
 <body>
 
@@ -137,25 +137,23 @@
 
         <div class="composition-panel" id="compositionCasesPanel" role="tabpanel"
              aria-labelledby="compositionCasesTab">
-          <p class="composition-total" id="compositionCasesTotal">0 тест-кейсов</p>
           <div class="composition-statuses" aria-label="Статусы тест-кейсов">
-            <span class="composition-status passed"><i></i><b id="statPassed">0</b> Passed</span>
-            <span class="composition-status failed"><i></i><b id="statFailed">0</b> Failed</span>
-            <span class="composition-status blocked"><i></i><b id="statBlocked">0</b> Blocked</span>
-            <span class="composition-status skipped"><i></i><b id="statSkipped">0</b> Skipped</span>
-            <span class="composition-status none"><i></i><b id="statNone">0</b> No status</span>
+            <button type="button" class="composition-status passed" data-status-item-type="case" data-status-value="Passed" data-status-label="Passed"><span><i aria-hidden="true"></i>Passed</span><b id="statPassed">0</b></button>
+            <button type="button" class="composition-status failed" data-status-item-type="case" data-status-value="Failed" data-status-label="Failed"><span><i aria-hidden="true"></i>Failed</span><b id="statFailed">0</b></button>
+            <button type="button" class="composition-status blocked" data-status-item-type="case" data-status-value="Blocked" data-status-label="Blocked"><span><i aria-hidden="true"></i>Blocked</span><b id="statBlocked">0</b></button>
+            <button type="button" class="composition-status skipped" data-status-item-type="case" data-status-value="Skipped" data-status-label="Skipped"><span><i aria-hidden="true"></i>Skipped</span><b id="statSkipped">0</b></button>
+            <button type="button" class="composition-status none" data-status-item-type="case" data-status-value="" data-status-label="No status"><span><i aria-hidden="true"></i>No status</span><b id="statNone">0</b></button>
           </div>
         </div>
 
         <div class="composition-panel" id="compositionBugsPanel" role="tabpanel"
              aria-labelledby="compositionBugsTab" hidden>
-          <p class="composition-total" id="compositionBugsTotal">0 баг-репортов</p>
           <div class="composition-statuses" aria-label="Статусы баг-репортов">
-            <span class="composition-status done"><i></i><b id="statBugDone">0</b> Done</span>
-            <span class="composition-status in-progress"><i></i><b id="statBugInProgress">0</b> In Progress</span>
-            <span class="composition-status to-do"><i></i><b id="statBugToDo">0</b> To Do</span>
-            <span class="composition-status backlog"><i></i><b id="statBugBacklog">0</b> Backlog</span>
-            <span class="composition-status none"><i></i><b id="statBugNone">0</b> No status</span>
+            <button type="button" class="composition-status done" data-status-item-type="bug" data-status-value="Done" data-status-label="Done"><span><i aria-hidden="true"></i>Done</span><b id="statBugDone">0</b></button>
+            <button type="button" class="composition-status in-progress" data-status-item-type="bug" data-status-value="In Progress" data-status-label="In Progress"><span><i aria-hidden="true"></i>In Progress</span><b id="statBugInProgress">0</b></button>
+            <button type="button" class="composition-status to-do" data-status-item-type="bug" data-status-value="To Do" data-status-label="To Do"><span><i aria-hidden="true"></i>To Do</span><b id="statBugToDo">0</b></button>
+            <button type="button" class="composition-status backlog" data-status-item-type="bug" data-status-value="Backlog" data-status-label="Backlog"><span><i aria-hidden="true"></i>Backlog</span><b id="statBugBacklog">0</b></button>
+            <button type="button" class="composition-status none" data-status-item-type="bug" data-status-value="" data-status-label="No status"><span><i aria-hidden="true"></i>No status</span><b id="statBugNone">0</b></button>
           </div>
         </div>
       </fieldset>
@@ -225,6 +223,6 @@
 <!-- выбор файлов для загрузки картинок -->
 <input type="file" id="fileInput" accept="image/png,image/jpeg" hidden multiple>
 
-<script type="module" src="js/app.js?v=header-panel-1"></script>
+<script type="module" src="js/app.js?v=report-statistics-2"></script>
 </body>
 </html>

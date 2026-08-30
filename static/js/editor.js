@@ -11,6 +11,7 @@ import {
   renderEmptyState,
 } from "./render.js";
 import { refreshDownloadButtons } from "./reports.js";
+import { highlightCard, scrollCardIntoView } from "./card-navigation.js";
 
 export function updateField(itemType, itemIndex, fieldName, value) {
   itemsOf(itemType)[itemIndex][fieldName] = value;
@@ -374,15 +375,11 @@ function revealDuplicatedCard(card) {
 
   card.querySelectorAll("textarea").forEach((textarea) => autoGrowTextarea(textarea));
   animateItemCard(card, "in").then(() => {
-    card.classList.add("just-duplicated");
-    setTimeout(() => card.classList.remove("just-duplicated"), 1600);
+    highlightCard(card);
 
     const title = card.querySelector("input.title");
     title?.focus({ preventScroll: true });
-    card.scrollIntoView({
-      behavior: prefersReducedMotion() ? "auto" : "smooth",
-      block: "start",
-    });
+    scrollCardIntoView(card);
   });
 }
 

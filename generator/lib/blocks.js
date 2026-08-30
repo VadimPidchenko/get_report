@@ -49,6 +49,68 @@ function textRun(content, options = {}) {
   }));
 }
 
+/** Явная гиперссылка с теми же параметрами шрифта, что и окружающий текст. */
+function externalLink(displayText, url, options = {}) {
+  return new ExternalHyperlink({
+    link: url,
+    children: [
+      new TextRun({
+        text: displayText,
+        font: FONT_FAMILY,
+        size: options.size || BASE_FONT_SIZE,
+        bold: Boolean(options.bold),
+        color: COLORS.link,
+        underline: {},
+      }),
+    ],
+  });
+}
+
+/** Отделяет от URL завершающие знаки обычного предложения. */
+function splitUrlPunctuation(value) {
+  let url = value;
+  let trailing = "";
+
+  while (/[.,;!?]$/.test(url)) {
+    trailing = url.at(-1) + trailing;
+    url = url.slice(0, -1);
+  }
+
+  [["(", ")"], ["[", "]"], ["{", "}"]].forEach(([opening, closing]) => {
+    const openingCount = [...url].filter((char) => char === opening).length;
+    let closingCount = [...url].filter((char) => char === closing).length;
+    while (url.endsWith(closing) && closingCount > openingCount) {
+      trailing = closing + trailing;
+      url = url.slice(0, -1);
+      closingCount -= 1;
+    }
+  });
+
+  return { url, trailing };
+}
+
+/** Превращает http/https внутри обычного текста в синие подчёркнутые ссылки. */
+function linkedTextRuns(content, options = {}) {
+  const value = String(content ?? "");
+  const urlPattern = /https?:\/\/[^\s]+/gi;
+  const children = [];
+  let cursor = 0;
+
+  value.replace(urlPattern, (matchedUrl, offset) => {
+    if (offset > cursor) children.push(textRun(value.slice(cursor, offset), options));
+
+    const { url, trailing } = splitUrlPunctuation(matchedUrl);
+    if (url) children.push(externalLink(url, url, options));
+    if (trailing) children.push(textRun(trailing, options));
+    cursor = offset + matchedUrl.length;
+    return matchedUrl;
+  });
+
+  if (cursor < value.length) children.push(textRun(value.slice(cursor), options));
+  if (!children.length) children.push(textRun(value, options));
+  return children;
+}
+
 /** Дети абзаца одним плоским списком: textRun при переносах возвращает несколько ранов. */
 const toChildren = (children) => [children].flat(Infinity);
 
@@ -169,18 +231,7 @@ function statusParagraph(status) {
 
 /** Ссылка на задачу: отображаемый текст и целевой URL. */
 function taskLink(displayText, url) {
-  return new ExternalHyperlink({
-    link: url,
-    children: [
-      new TextRun({
-        text: displayText,
-        font: FONT_FAMILY,
-        size: BASE_FONT_SIZE,
-        color: COLORS.link,
-        underline: {},
-      }),
-    ],
-  });
+  return externalLink(displayText, url);
 }
 
 /**
@@ -231,7 +282,7 @@ function imageBlock(imagesDir, filename, caption, isFirstInBlock) {
   ];
 
   if (caption) {
-    blocks.push(paragraph([textRun(caption, { size: 18, color: COLORS.caption })], {
+    blocks.push(paragraph(linkedTextRuns(caption, { size: 18, color: COLORS.caption }), {
       after: SPACING.afterCaption,
       alignment: AlignmentType.CENTER,
     }));
@@ -242,6 +293,7 @@ function imageBlock(imagesDir, filename, caption, isFirstInBlock) {
 
 module.exports = {
   textRun,
+  linkedTextRuns,
   paragraph,
   fieldLabel,
   emptyLine,
