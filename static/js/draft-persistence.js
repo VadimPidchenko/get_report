@@ -89,6 +89,10 @@ async function persistDraft(draft, generation) {
       draftName.textContent = title;
       draftName.classList.remove("invalid");
       draftName.removeAttribute("aria-invalid");
+      const reportTitle = byId("reportTitle");
+      reportTitle.value = title;
+      reportTitle.classList.remove("invalid");
+      reportTitle.removeAttribute("aria-invalid");
       setSaveStatus("сохранено ✓", { fade: true });
     }
 
@@ -131,6 +135,10 @@ function runScheduledSave(pending) {
 export function scheduleSave() {
   const draft = currentDraft;
   const previous = takeScheduledSave();
+
+  // Производные элементы интерфейса (сводка, контекст) обновляются сразу,
+  // не дожидаясь сетевого сохранения.
+  document.dispatchEvent(new Event("app:draft-changed"));
 
   // Если пользователь уже переключился, не теряем отложенные правки прошлого draft.
   if (previous && previous.draft !== draft) runScheduledSave(previous);

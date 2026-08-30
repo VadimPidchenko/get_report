@@ -13,10 +13,10 @@ const PROJECT_BADGES = {
  * Метка проекта.
  *
  * Пока проект не выбран, отчёт не собрать: проверка перед сборкой не пустит.
- * Поэтому пустое поле и значит «черновик» — отдельный флаг не нужен.
+ * В компактной карточке пустое значение обозначаем как NO PROJECT.
  */
 export function draftBadge(project) {
-  if (!project) return { label: "draft", kind: "draft" };
+  if (!project) return { label: "NO PROJECT", kind: "none" };
 
   // проект не из списка — показываем как есть, обрезав до ширины метки
   return PROJECT_BADGES[project] || { label: project.slice(0, 4), kind: "other" };

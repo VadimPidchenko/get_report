@@ -5,6 +5,7 @@ const { Document } = require("docx");
 
 const {
   textRun,
+  linkedTextRuns,
   paragraph,
   fieldLabel,
   emptyLine,
@@ -45,7 +46,7 @@ function appendField(blocks, title, values, numbering) {
 
   const reference = numbering.createReference();
   filled.forEach((value) => {
-    blocks.push(numberedParagraph([textRun(value)], reference));
+    blocks.push(numberedParagraph(linkedTextRuns(value), reference));
   });
 }
 
@@ -88,7 +89,7 @@ function appendTestResult(blocks, testCase, imagesDir, numbering) {
   if (filled.length) {
     const reference = numbering.createReference();
     filled.forEach((value) => {
-      blocks.push(numberedParagraph([textRun(value)], reference));
+      blocks.push(numberedParagraph(linkedTextRuns(value), reference));
     });
   }
 
@@ -107,7 +108,7 @@ function buildTestCase(testCase, options) {
   const blocks = [];
 
   blocks.push(paragraph(
-    [textRun(`${index}. ${testCase.name || EMPTY_FIELD_PLACEHOLDER}`, { bold: true, size: 26 })],
+    linkedTextRuns(`${index}. ${testCase.name || EMPTY_FIELD_PLACEHOLDER}`, { bold: true, size: 26 }),
     { after: SPACING.afterParagraph },
   ));
 
@@ -143,15 +144,16 @@ function buildBugSection(bugs, options) {
   })];
 
   bugs.forEach((bug, index) => {
-    blocks.push(paragraph([textRun(`${index + 1}. ${bug.title}`, { bold: true, size: 24 })], {
+    blocks.push(paragraph(linkedTextRuns(`${index + 1}. ${bug.title}`, { bold: true, size: 24 }), {
       after: SPACING.afterLabel,
+      ...(index > 0 && { before: SPACING.beforeBugReport }),
     }));
 
     appendTasks(blocks, bug.tasks, jiraBaseUrl, numbering);
 
     if (bug.desc) {
       blocks.push(fieldLabel("Описание:"));
-      blocks.push(indentedParagraph([textRun(bug.desc.trim())]));
+      blocks.push(indentedParagraph(linkedTextRuns(bug.desc.trim())));
     }
 
     blocks.push(statusParagraph(bug.status));

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Report Builder</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=report-statistics-3">
 </head>
 <body>
 
@@ -16,64 +16,179 @@
   <button class="newbtn" id="newDraftBtn">+ Новый отчёт</button>
 </aside>
 
-<header>
+<header class="topbar">
   <div class="head-left">
     <button class="burger" id="burger" title="Отчёты" aria-label="Открыть отчёты">☰</button>
-    <span class="draft-name" id="draftName" title="Кликните, чтобы переименовать">—</span>
+    <button class="draft-name" id="draftName" type="button"
+            title="Открыть данные отчёта">—</button>
     <span class="autosave" id="autosave" aria-live="polite"></span>
   </div>
 
-  <div class="tabs" role="tablist" aria-label="Тип данных отчёта">
-    <button class="tab active" type="button" role="tab" aria-selected="true" data-tab="cases">
-      Тест-кейсы <span class="count" id="cCount">0</span>
-    </button>
-    <button class="tab" type="button" role="tab" aria-selected="false" data-tab="bugs">
-      Баг-репорты <span class="count" id="bCount">0</span>
-    </button>
-  </div>
-
-  <div class="meta">
-    <div class="meta-field project-field">
-      <span>Проект</span>
-      <div class="project-dropdown" id="projectDropdown">
-        <button type="button" class="project-trigger" id="projectTrigger"
-                aria-haspopup="listbox" aria-expanded="false">
-          <span class="project-label">—</span>
-          <span class="dropdown-arrow"></span>
-        </button>
-        <div class="project-options" id="projectOptions" role="listbox" aria-label="Проект">
-          <button type="button" class="project-option selected" role="option" aria-selected="true" data-value="">—</button>
-          <button type="button" class="project-option" role="option" aria-selected="false" data-value="a7.ru">a7.ru</button>
-          <button type="button" class="project-option" role="option" aria-selected="false" data-value="finmart">finmart</button>
-        </div>
-      </div>
-      <!-- Нативный select остаётся источником значения для существующей логики состояния/API. -->
-      <select id="project" class="native-project-select" tabindex="-1" aria-hidden="true">
-        <option value="" selected>—</option>
-        <option value="a7.ru">a7.ru</option>
-        <option value="finmart">finmart</option>
-      </select>
-    </div>
-    <label class="meta-field">
-      <span>Дата</span>
-      <input id="date" class="meta-date" inputmode="numeric" placeholder="ДД.ММ.ГГГГ" autocomplete="off">
-    </label>
-    <label class="meta-field">
-      <span>Таск-трекер</span>
-      <input id="jira" class="meta-jira">
-    </label>
-  </div>
+  <button class="report-panel-trigger" id="reportPanelTrigger" type="button"
+          aria-controls="reportPanel" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 3.75h7l3 3V20.25H7z"></path>
+      <path d="M14 3.75v3h3M9.5 11.25h5M9.5 14.5h5"></path>
+    </svg>
+    Сформировать отчёт
+  </button>
 </header>
 
-<main class="wrap">
-  <div id="casesPane"></div>
-  <div id="bugsPane" style="display:none"></div>
-</main>
+<div class="workspace-layout" id="workspaceLayout">
+  <section class="report-column" aria-label="Редактор отчёта">
+    <div class="workspace-nav">
+      <div class="tabs" role="tablist" aria-label="Тип данных отчёта">
+        <button class="tab active" type="button" role="tab" aria-selected="true" data-tab="cases">
+          Тест-кейсы <span class="count" id="cCount">0</span>
+        </button>
+        <button class="tab" type="button" role="tab" aria-selected="false" data-tab="bugs">
+          Баг-репорты <span class="count" id="bCount">0</span>
+        </button>
+      </div>
+      <div class="report-context" aria-label="Краткие данные отчёта">
+        <span id="contextProject">—</span>
+        <span class="context-separator" aria-hidden="true">·</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 3.75v3M17 3.75v3M4.75 9h14.5M5.75 5.5h12.5a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5.75a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"></path>
+        </svg>
+        <span id="contextDate">—</span>
+      </div>
+    </div>
 
-<div class="footbar">
-  <button class="btn big" id="dlDocx">Скачать DOCX</button>
-  <button class="btn big" id="dlPdf">Скачать PDF</button>
-  <span class="status" id="statusMsg" aria-live="polite"></span>
+    <main class="wrap">
+      <div id="casesPane"></div>
+      <div id="bugsPane" style="display:none"></div>
+    </main>
+  </section>
+
+  <aside class="report-panel" id="reportPanel" aria-labelledby="reportPanelTitle"
+         aria-hidden="true">
+    <div class="report-panel-head">
+      <div>
+        <h2 id="reportPanelTitle">Сформировать отчёт</h2>
+        <p>Проверьте данные и выберите формат.</p>
+      </div>
+      <button class="report-panel-close" id="reportPanelClose" type="button"
+              aria-label="Закрыть окно формирования отчёта">×</button>
+    </div>
+
+    <div class="report-panel-body">
+      <fieldset class="report-panel-fields" id="reportPanelFields">
+        <legend>Параметры отчёта</legend>
+
+        <label class="panel-field" for="reportTitle">
+          <span>Название отчёта</span>
+          <input id="reportTitle" autocomplete="off" placeholder="Например, Release 06.08.26">
+        </label>
+
+        <div class="panel-field project-field">
+          <span>Проект</span>
+          <div class="project-dropdown" id="projectDropdown">
+            <button type="button" class="project-trigger" id="projectTrigger"
+                    aria-haspopup="listbox" aria-expanded="false">
+              <span class="project-label">—</span>
+              <span class="dropdown-arrow"></span>
+            </button>
+            <div class="project-options" id="projectOptions" role="listbox" aria-label="Проект">
+              <button type="button" class="project-option selected" role="option" aria-selected="true" data-value="">—</button>
+              <button type="button" class="project-option" role="option" aria-selected="false" data-value="a7.ru">a7.ru</button>
+              <button type="button" class="project-option" role="option" aria-selected="false" data-value="finmart">finmart</button>
+            </div>
+          </div>
+          <!-- Нативный select остаётся источником значения для существующей логики состояния/API. -->
+          <select id="project" class="native-project-select" tabindex="-1" aria-hidden="true">
+            <option value="" selected>—</option>
+            <option value="a7.ru">a7.ru</option>
+            <option value="finmart">finmart</option>
+          </select>
+        </div>
+
+        <label class="panel-field" for="date">
+          <span>Дата</span>
+          <span class="panel-input-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 3.75v3M17 3.75v3M4.75 9h14.5M5.75 5.5h12.5a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5.75a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"></path>
+            </svg>
+            <input id="date" class="meta-date" inputmode="numeric"
+                   placeholder="ДД.ММ.ГГГГ" autocomplete="off">
+          </span>
+        </label>
+
+        <label class="panel-field" for="jira">
+          <span>Таск-трекер</span>
+          <input id="jira" class="meta-jira">
+        </label>
+      </fieldset>
+
+      <fieldset class="report-composition" id="reportCompositionControls">
+        <legend>Состав отчёта</legend>
+        <div class="composition-tabs" role="tablist" aria-label="Состав отчёта">
+          <button class="composition-tab active" id="compositionCasesTab" type="button" role="tab"
+                  aria-selected="true" aria-controls="compositionCasesPanel"
+                  data-composition-tab="cases">
+            Тест-кейсы <span aria-hidden="true">·</span> <b id="compositionCasesCount">0</b>
+          </button>
+          <button class="composition-tab" id="compositionBugsTab" type="button" role="tab" tabindex="-1"
+                  aria-selected="false" aria-controls="compositionBugsPanel"
+                  data-composition-tab="bugs">
+            Баг-репорты <span aria-hidden="true">·</span> <b id="compositionBugsCount">0</b>
+          </button>
+        </div>
+
+        <div class="composition-panel" id="compositionCasesPanel" role="tabpanel"
+             aria-labelledby="compositionCasesTab">
+          <div class="composition-statuses" aria-label="Статусы тест-кейсов">
+            <button type="button" class="composition-status passed" data-status-item-type="case" data-status-value="Passed" data-status-label="Passed"><span><i aria-hidden="true"></i>Passed</span><b id="statPassed">0</b></button>
+            <button type="button" class="composition-status failed" data-status-item-type="case" data-status-value="Failed" data-status-label="Failed"><span><i aria-hidden="true"></i>Failed</span><b id="statFailed">0</b></button>
+            <button type="button" class="composition-status blocked" data-status-item-type="case" data-status-value="Blocked" data-status-label="Blocked"><span><i aria-hidden="true"></i>Blocked</span><b id="statBlocked">0</b></button>
+            <button type="button" class="composition-status skipped" data-status-item-type="case" data-status-value="Skipped" data-status-label="Skipped"><span><i aria-hidden="true"></i>Skipped</span><b id="statSkipped">0</b></button>
+            <button type="button" class="composition-status none" data-status-item-type="case" data-status-value="" data-status-label="No status"><span><i aria-hidden="true"></i>No status</span><b id="statNone">0</b></button>
+          </div>
+        </div>
+
+        <div class="composition-panel" id="compositionBugsPanel" role="tabpanel"
+             aria-labelledby="compositionBugsTab" hidden>
+          <div class="composition-statuses" aria-label="Статусы баг-репортов">
+            <button type="button" class="composition-status done" data-status-item-type="bug" data-status-value="Done" data-status-label="Done"><span><i aria-hidden="true"></i>Done</span><b id="statBugDone">0</b></button>
+            <button type="button" class="composition-status in-progress" data-status-item-type="bug" data-status-value="In Progress" data-status-label="In Progress"><span><i aria-hidden="true"></i>In Progress</span><b id="statBugInProgress">0</b></button>
+            <button type="button" class="composition-status to-do" data-status-item-type="bug" data-status-value="To Do" data-status-label="To Do"><span><i aria-hidden="true"></i>To Do</span><b id="statBugToDo">0</b></button>
+            <button type="button" class="composition-status backlog" data-status-item-type="bug" data-status-value="Backlog" data-status-label="Backlog"><span><i aria-hidden="true"></i>Backlog</span><b id="statBugBacklog">0</b></button>
+            <button type="button" class="composition-status none" data-status-item-type="bug" data-status-value="" data-status-label="No status"><span><i aria-hidden="true"></i>No status</span><b id="statBugNone">0</b></button>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="report-format" id="reportFormatFields">
+        <legend>Формат отчёта</legend>
+        <div class="format-options">
+          <label class="format-option">
+            <input type="radio" name="reportFormat" value="docx">
+            <span class="format-icon docx" aria-hidden="true">DOCX</span>
+            <span class="format-name">DOCX</span>
+            <span class="format-description">Редактируемый документ</span>
+            <span class="format-radio" aria-hidden="true"></span>
+          </label>
+          <label class="format-option">
+            <input type="radio" name="reportFormat" value="pdf" checked>
+            <span class="format-icon pdf" aria-hidden="true">PDF</span>
+            <span class="format-name">PDF</span>
+            <span class="format-description">Готовый к отправке</span>
+            <span class="format-radio" aria-hidden="true"></span>
+          </label>
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="report-panel-foot">
+      <div class="report-panel-status" id="statusMsg" aria-live="polite"></div>
+      <button class="report-generate" id="generateReport" type="button">
+        <span class="report-generate-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 3.75h7l3 3V20.25H7z"></path><path d="M14 3.75v3h3M9.5 11.25h5M9.5 14.5h5"></path></svg>
+        </span>
+        <span id="generateReportLabel">Сформировать и скачать PDF</span>
+      </button>
+    </div>
+  </aside>
 </div>
 
 <!-- всплывающие уведомления -->
@@ -108,6 +223,6 @@
 <!-- выбор файлов для загрузки картинок -->
 <input type="file" id="fileInput" accept="image/png,image/jpeg" hidden multiple>
 
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/app.js?v=report-statistics-2"></script>
 </body>
 </html>

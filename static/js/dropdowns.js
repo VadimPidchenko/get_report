@@ -1,7 +1,7 @@
 // Управление выпадающими списками проекта и статусов.
 
 import { byId } from "./dom.js";
-import { updateField, closeItemMenus } from "./editor.js";
+import { updateField, closeItemMenus } from "./editor.js?v=card-navigation-1";
 import { clearFieldError } from "./reports.js";
 import { statusClass } from "./render.js";
 import { closeDraftMenus } from "./drafts.js";
@@ -95,7 +95,7 @@ function closeStatusDropdowns(except = null) {
   });
 }
 
-/** Выбирает направление меню статуса так, чтобы оно не попадало под sticky footer. */
+/** Выбирает направление меню статуса по свободному месту во viewport. */
 function positionStatusDropdown(dropdown) {
   const trigger = dropdown.querySelector(".status-trigger");
   const menu = dropdown.querySelector(".status-options");
@@ -103,9 +103,8 @@ function positionStatusDropdown(dropdown) {
 
   dropdown.classList.remove("drop-up");
   const triggerRect = trigger.getBoundingClientRect();
-  const footerTop = document.querySelector(".footbar")?.getBoundingClientRect().top ?? window.innerHeight;
   const menuHeight = menu.scrollHeight;
-  const below = footerTop - triggerRect.bottom - 8;
+  const below = window.innerHeight - triggerRect.bottom - 8;
   const above = triggerRect.top - 8;
 
   if (below < menuHeight && above > below) dropdown.classList.add("drop-up");

@@ -10,6 +10,7 @@ import { currentDraft } from "./state.js";
 import { saveNow, scheduleSave } from "./draft-persistence.js";
 import { setStatusMessage, showToast } from "./notifications.js";
 import { confirmAction } from "./dialogs.js";
+import { getSelectedReportFormat } from "./report-panel.js?v=report-statistics-2";
 
 const VALIDATION_MESSAGE_TIMEOUT_MS = 4500;
 const SCROLL_FOCUS_DELAY_MS = 360;
@@ -20,12 +21,19 @@ const RESULT_WARNING_VIEWPORT_RATIO = 0.45;
 const RESULT_WARNING_HIGHLIGHT_MS = 1800;
 const SKIP_FAILED_RESULTS_WARNING = "skip_failed_results_warning";
 const REPORT_DATE_PATTERN = /^(\d{2})\.(\d{2})\.(\d{4})$/;
+const REPORT_READY_STATE_MS = 650;
 
-const downloadButtons = () => [byId("dlDocx"), byId("dlPdf")];
+const downloadButtons = () => [byId("generateReport")];
 
 /** Блокирует кнопки на время сборки отчёта. */
 function setButtonsBusy(isBusy) {
   downloadButtons().forEach((button) => { button.disabled = isBusy; });
+  byId("reportPanelFields").disabled = isBusy;
+  byId("reportCompositionControls").disabled = isBusy;
+  byId("reportFormatFields").disabled = isBusy;
+  byId("reportPanelClose").disabled = isBusy;
+  byId("reportPanelTrigger").disabled = isBusy;
+  byId("reportPanel").setAttribute("aria-busy", String(isBusy));
 }
 
 /** Обновляет доступность кнопок под текущее содержимое черновика. */
@@ -135,11 +143,16 @@ function validateProject() {
 function validateReportTitle() {
   if (String(currentDraft._title || "").trim()) return true;
 
+  const reportTitle = byId("reportTitle");
   const draftName = byId("draftName");
+  reportTitle.classList.add("invalid");
+  reportTitle.setAttribute("aria-invalid", "true");
   draftName.classList.add("invalid");
   draftName.setAttribute("aria-invalid", "true");
   setProblemMessage("Укажите название отчёта");
-  draftName.click();
+  document.dispatchEvent(new CustomEvent("app:open-report-panel", {
+    detail: { focus: "title" },
+  }));
   return false;
 }
 
@@ -243,9 +256,8 @@ function scrollProblemIntoView(target) {
 
   const rect = target.container.getBoundingClientRect();
   const headerBottom = document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0;
-  const footerTop = document.querySelector(".footbar")?.getBoundingClientRect().top ?? window.innerHeight;
   const visibleTop = Math.max(0, headerBottom);
-  const visibleBottom = Math.min(window.innerHeight, footerTop);
+  const visibleBottom = window.innerHeight;
   const visibleHeight = Math.max(1, visibleBottom - visibleTop);
   const ratio = target.viewportRatio ?? 0.5;
   const desiredCenterY = visibleTop + visibleHeight * ratio;
@@ -300,6 +312,9 @@ function highlightRequiredFields(problemsByTab) {
 
   if (!targetTab) return false;
 
+  // Освобождаем рабочую область перед переходом к ошибке в карточке.
+  document.dispatchEvent(new Event("app:close-report-panel"));
+
   if (activeTab !== targetTab) {
     document.querySelector(`.tab[data-tab="${targetTab}"]`)?.click();
   }
@@ -316,6 +331,7 @@ function highlightRequiredFields(problemsByTab) {
 
 /** Возвращает пользователя к первому кейсу из предупреждения. */
 function revealFirstMissingResult(problem) {
+  document.dispatchEvent(new Event("app:close-report-panel"));
   const activeTab = document.querySelector(".tab.active")?.dataset.tab || "cases";
   if (activeTab !== "cases") document.querySelector('.tab[data-tab="cases"]')?.click();
 
@@ -414,9 +430,11 @@ async function downloadReport(outputFormat, button) {
   if (highlightRequiredFields(requiredFieldProblems)) return;
   if (!await confirmMissingFailedResults(outputFormat)) return;
 
-  const originalLabel = button.textContent;
+  const buttonLabel = byId("generateReportLabel");
+  const originalLabel = buttonLabel.textContent;
   setButtonsBusy(true);
-  button.textContent = "Готовлю…";
+  button.classList.add("is-busy");
+  buttonLabel.textContent = `Формируем ${outputFormat.toUpperCase()}…`;
   byId("statusMsg").classList.remove("error");
   setStatusMessage("");
 
@@ -428,19 +446,25 @@ async function downloadReport(outputFormat, button) {
     }
 
     const { file } = await api.buildReport(outputFormat, currentDraft);
+    button.classList.remove("is-busy");
+    button.classList.add("is-ready");
+    buttonLabel.textContent = `${outputFormat.toUpperCase()} готов`;
+    await new Promise((resolve) => window.setTimeout(resolve, REPORT_READY_STATE_MS));
     triggerDownload(api.reportUrl(currentDraft._id, file));
   } catch (error) {
     const message = `Ошибка: ${String(error.message).slice(0, 160)}`;
     setStatusMessage(message);
     showToast(message, { kind: "error", timeout: 6500 });
   } finally {
-    button.textContent = originalLabel;
+    button.classList.remove("is-busy", "is-ready");
+    buttonLabel.textContent = originalLabel;
     setButtonsBusy(false);
     refreshDownloadButtons();
   }
 }
 
 export function initDownloadButtons() {
-  byId("dlDocx").addEventListener("click", (event) => downloadReport("docx", event.currentTarget));
-  byId("dlPdf").addEventListener("click", (event) => downloadReport("pdf", event.currentTarget));
+  byId("generateReport").addEventListener("click", (event) => {
+    downloadReport(getSelectedReportFormat(), event.currentTarget);
+  });
 }
