@@ -19,14 +19,20 @@ export function highlightCard(card) {
   highlightedCard?.classList.add("card-navigation-target");
 }
 
-export function scrollCardIntoView(card) {
+export function scrollCardIntoView(card, { maxScroll: maxScrollOverride } = {}) {
   if (!card) return;
 
   const cardRect = card.getBoundingClientRect();
   const navigationBottom = document.querySelector(".workspace-nav")
     ?.getBoundingClientRect().bottom ?? 0;
   const desiredTop = navigationBottom + CARD_SCROLL_GAP;
-  const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  const documentMaxScroll = Math.max(
+    0,
+    document.documentElement.scrollHeight - window.innerHeight,
+  );
+  const maxScroll = Number.isFinite(maxScrollOverride)
+    ? Math.max(0, Math.min(documentMaxScroll, maxScrollOverride))
+    : documentMaxScroll;
   const nextTop = Math.max(
     0,
     Math.min(maxScroll, window.scrollY + cardRect.top - desiredTop),

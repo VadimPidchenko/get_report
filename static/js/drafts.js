@@ -24,7 +24,7 @@ import {
 } from "./render.js";
 import { showToast } from "./notifications.js";
 import { askText, confirmAction } from "./dialogs.js";
-import { closeItemMenus } from "./editor.js?v=card-navigation-1";
+import { closeItemMenus } from "./editor.js?v=motion-navigation-5";
 
 function openSidebar() {
   byId("sidebar").classList.add("open");

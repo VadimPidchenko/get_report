@@ -1,7 +1,7 @@
 // Управление выпадающими списками проекта и статусов.
 
 import { byId } from "./dom.js";
-import { updateField, closeItemMenus } from "./editor.js?v=card-navigation-1";
+import { updateField, closeItemMenus } from "./editor.js?v=motion-navigation-5";
 import { clearFieldError } from "./reports.js";
 import { statusClass } from "./render.js";
 import { closeDraftMenus } from "./drafts.js";
@@ -102,8 +102,10 @@ function positionStatusDropdown(dropdown) {
   if (!trigger || !menu) return;
 
   dropdown.classList.remove("drop-up");
+  menu.classList.add("measuring");
   const triggerRect = trigger.getBoundingClientRect();
   const menuHeight = menu.scrollHeight;
+  menu.classList.remove("measuring");
   const below = window.innerHeight - triggerRect.bottom - 8;
   const above = triggerRect.top - 8;
 

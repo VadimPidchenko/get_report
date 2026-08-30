@@ -30,11 +30,11 @@ import {
   initValidationEvents,
 } from "./reports.js";
 import { initDialogs } from "./dialogs.js";
-import { initEditorEvents } from "./editor.js?v=card-navigation-1";
+import { initEditorEvents } from "./editor.js?v=motion-navigation-5";
 import {
   initProjectDropdown,
   initStatusDropdowns,
-} from "./dropdowns.js";
+} from "./dropdowns.js?v=motion-navigation-5";
 import {
   initTabs,
   initScrollMemory,
@@ -44,7 +44,7 @@ import {
 import {
   initReportPanel,
   refreshReportPanel,
-} from "./report-panel.js?v=report-statistics-2";
+} from "./report-panel.js?v=motion-navigation-2";
 
 /** Показывает разделяющую тень только после начала прокрутки страницы. */
 function initStickyNavState() {
