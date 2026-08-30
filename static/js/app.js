@@ -41,6 +41,20 @@ import {
   restoreSavedTab,
   restoreScroll,
 } from "./view-session.js";
+import {
+  initReportPanel,
+  refreshReportPanel,
+} from "./report-panel.js";
+
+/** Показывает разделяющую тень только после начала прокрутки страницы. */
+function initStickyNavState() {
+  const navigation = document.querySelector(".workspace-nav");
+  if (!navigation) return;
+
+  const syncState = () => navigation.classList.toggle("is-scrolled", window.scrollY > 1);
+  syncState();
+  window.addEventListener("scroll", syncState, { passive: true });
+}
 
 /**
  * Готовит начальное состояние.
@@ -81,9 +95,11 @@ async function restoreInitialDraft() {
 
 async function init() {
   initTabs();
+  initStickyNavState();
   initEditorEvents();
   initProjectDropdown();
   initDialogs();
+  initReportPanel();
   initDraftEvents();
   initStatusDropdowns();
   initValidationEvents();
@@ -92,6 +108,7 @@ async function init() {
   initDownloadButtons();
 
   onAfterRender(refreshDownloadButtons);
+  onAfterRender(refreshReportPanel);
   onDraftSaved(refreshDraftList);
 
   await restoreInitialDraft();

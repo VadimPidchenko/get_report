@@ -279,6 +279,10 @@ async function saveCurrentDraftTitle(title) {
   draftName.textContent = title;
   draftName.classList.remove("invalid");
   draftName.removeAttribute("aria-invalid");
+  const reportTitle = byId("reportTitle");
+  reportTitle.value = title;
+  reportTitle.classList.remove("invalid");
+  reportTitle.removeAttribute("aria-invalid");
 
   try {
     await saveNow();
@@ -325,20 +329,6 @@ async function deleteDraft(draftId) {
   } else {
     await refreshDraftList();
   }
-}
-
-/** Переименование черновика по клику на название в шапке. */
-async function renameCurrentDraft() {
-  const title = await askText({
-    title: currentDraft._title ? "Переименовать отчёт" : "Создать отчёт",
-    inputLabel: currentDraft._title ? "Новое название" : "Название",
-    value: currentDraft._title || "",
-    confirmLabel: "Сохранить",
-    required: true,
-  });
-  if (title === null) return;
-
-  await saveCurrentDraftTitle(title);
 }
 
 async function resumeLastDraft() {
@@ -411,7 +401,11 @@ export function initDraftEvents() {
   });
   byId("backdrop").addEventListener("click", closeSidebar);
   byId("newDraftBtn").addEventListener("click", startNewDraft);
-  byId("draftName").addEventListener("click", renameCurrentDraft);
+  byId("draftName").addEventListener("click", () => {
+    document.dispatchEvent(new CustomEvent("app:open-report-panel", {
+      detail: { focus: "title" },
+    }));
+  });
 
   const draftList = byId("draftList");
   draftList.addEventListener("click", handleDraftListClick);

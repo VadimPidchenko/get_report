@@ -385,9 +385,10 @@ export function syncHeader() {
   syncProjectSelect(currentDraft.project || "");
   byId("date").value = currentDraft.date || "";
   byId("jira").value = currentDraft.jira_base || "";
+  byId("reportTitle").value = currentDraft._title || "";
   byId("draftName").textContent = currentDraft._title || "Новый отчёт (не сохранён)";
 
-  [byId("projectDropdown"), byId("date"), byId("draftName")].forEach((field) => {
+  [byId("projectDropdown"), byId("date"), byId("reportTitle"), byId("draftName")].forEach((field) => {
     field?.classList.remove("invalid");
     field?.removeAttribute("aria-invalid");
   });
