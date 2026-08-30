@@ -9,12 +9,14 @@ import {
   getHighlightedCard,
   highlightCard as highlightNavigatedCard,
   scrollCardIntoView,
-} from "./card-navigation.js";
+} from "./card-navigation.js?v=motion-navigation-3";
 
 const PANEL_OPEN_CLASS = "report-panel-open";
-const PANEL_TRANSITION_MS = 260;
+const PANEL_CLOSING_CLASS = "report-panel-closing";
+const PANEL_TRANSITION_MS = 300;
 
 let navigationDraft = null;
+let panelClosingTimer = null;
 const lastStatusTargets = new Map();
 let highlightedTarget = null;
 
@@ -27,6 +29,20 @@ function selectedFormat() {
 function setPanelOpen(isOpen, { focusTitle = false } = {}) {
   const panel = byId("reportPanel");
   const trigger = byId("reportPanelTrigger");
+
+  window.clearTimeout(panelClosingTimer);
+  panelClosingTimer = null;
+  document.body.classList.remove(PANEL_CLOSING_CLASS);
+
+  if (!isOpen && document.body.classList.contains(PANEL_OPEN_CLASS)) {
+    // Сохраняем окончательные размеры панели до конца fade/slide-out. Без этого
+    // содержимое успевает сжаться в нулевую колонку раньше, чем станет невидимым.
+    document.body.classList.add(PANEL_CLOSING_CLASS);
+    panelClosingTimer = window.setTimeout(() => {
+      document.body.classList.remove(PANEL_CLOSING_CLASS);
+      panelClosingTimer = null;
+    }, PANEL_TRANSITION_MS);
+  }
 
   document.body.classList.toggle(PANEL_OPEN_CLASS, isOpen);
   panel.setAttribute("aria-hidden", String(!isOpen));

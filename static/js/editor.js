@@ -11,7 +11,17 @@ import {
   renderEmptyState,
 } from "./render.js";
 import { refreshDownloadButtons } from "./reports.js";
-import { highlightCard, scrollCardIntoView } from "./card-navigation.js";
+import { highlightCard, scrollCardIntoView } from "./card-navigation.js?v=motion-navigation-3";
+
+// Те же уровни движения используются в CSS. Числа внутри многофазных
+// анимаций выводим из них, чтобы добавление строк и карточек не жило в своём
+// отдельном темпе.
+const MOTION = Object.freeze({
+  fast: 120,
+  base: 180,
+  attention: 280,
+  attentionExit: 300,
+});
 
 export function updateField(itemType, itemIndex, fieldName, value) {
   itemsOf(itemType)[itemIndex][fieldName] = value;
@@ -88,7 +98,7 @@ function animateListRow(row, direction = "in") {
         { height: `${height}px`, marginTop: "0px" },
       ],
       {
-        duration: 150,
+        duration: MOTION.base,
         easing: "cubic-bezier(.2, .75, .25, 1)",
         fill: "both",
       },
@@ -100,8 +110,8 @@ function animateListRow(row, direction = "in") {
         { opacity: 1, transform: "translateY(0)" },
       ],
       {
-        duration: 130,
-        delay: 95,
+        duration: MOTION.fast,
+        delay: MOTION.base / 2,
         easing: "cubic-bezier(.2, .75, .25, 1)",
         fill: "both",
       },
@@ -127,7 +137,7 @@ function animateListRow(row, direction = "in") {
       { opacity: 0, transform: "translateY(-3px)" },
     ],
     {
-      duration: 130,
+      duration: MOTION.fast,
       easing: "cubic-bezier(.2, .75, .25, 1)",
       fill: "both",
     },
@@ -139,8 +149,8 @@ function animateListRow(row, direction = "in") {
       { height: "0px", marginTop: "-8px" },
     ],
     {
-      duration: 150,
-      delay: 95,
+      duration: MOTION.base,
+      delay: MOTION.base / 2,
       easing: "cubic-bezier(.2, .75, .25, 1)",
       fill: "both",
     },
@@ -308,8 +318,8 @@ function animateItemCard(card, direction = "in") {
   const animation = card.animate(
     entering ? [collapsed, expanded] : [expanded, collapsed],
     {
-      duration: entering ? 280 : 250,
-      easing: entering ? "cubic-bezier(.16, 1, .3, 1)" : "cubic-bezier(.4, 0, .2, 1)",
+      duration: entering ? MOTION.attention : MOTION.attentionExit,
+      easing: entering ? "cubic-bezier(.16, 1, .3, 1)" : "cubic-bezier(.3, 0, .25, 1)",
       fill: "both",
     },
   );
@@ -319,6 +329,32 @@ function animateItemCard(card, direction = "in") {
     card.classList.remove("motion-running");
     card.style.pointerEvents = "";
   });
+}
+
+/**
+ * Единый сценарий появления новой карточки: раскрытие, перевод внимания и
+ * прокрутка начинаются вместе, без отдельной паузы между фазами.
+ */
+function revealInsertedCard(card) {
+  if (!card) return;
+
+  card.querySelectorAll("textarea").forEach((textarea) => autoGrowTextarea(textarea));
+  const pane = card.parentElement;
+  const previousMinHeight = pane?.style.minHeight || "";
+
+  // До запуска height-анимации DOM уже содержит карточку в полном размере.
+  // Фиксируем конечную высоту списка, чтобы во время визуального раскрытия
+  // scrollHeight не откатывался к старому значению и браузер не обрезал скролл.
+  if (pane) pane.style.minHeight = `${pane.getBoundingClientRect().height}px`;
+
+  animateItemCard(card, "in").finally(() => {
+    if (pane) pane.style.minHeight = previousMinHeight;
+  });
+  highlightCard(card);
+
+  const title = card.querySelector("input.title");
+  title?.focus({ preventScroll: true });
+  scrollCardIntoView(card);
 }
 
 function addItem(itemType) {
@@ -333,14 +369,19 @@ function addItem(itemType) {
   pane?.querySelector(".empty-state")?.remove();
   pane?.querySelector(".resume-bar")?.remove();
 
+  let card = null;
   if (pane && addButton) {
     addButton.insertAdjacentHTML("beforebegin", renderItemCard(itemType, item, itemIndex));
-    const card = pane.querySelector(`.card[data-item-type="${itemType}"][data-item-index="${itemIndex}"]`);
-    animateItemCard(card, "in");
+    card = pane.querySelector(`.card[data-item-type="${itemType}"][data-item-index="${itemIndex}"]`);
   } else {
     // Аварийный fallback оставляем только для реально рассинхронизированного DOM.
     render();
+    card = paneFor(itemType)?.querySelector(
+      `.card[data-item-type="${itemType}"][data-item-index="${itemIndex}"]`,
+    );
   }
+
+  revealInsertedCard(card);
 
   updateItemCount(itemType);
   refreshDownloadButtons();
@@ -371,16 +412,7 @@ function copyTitle(itemType, sourceTitle) {
 
 /** Показывает новую карточку и переводит пользователя к редактированию названия. */
 function revealDuplicatedCard(card) {
-  if (!card) return;
-
-  card.querySelectorAll("textarea").forEach((textarea) => autoGrowTextarea(textarea));
-  animateItemCard(card, "in").then(() => {
-    highlightCard(card);
-
-    const title = card.querySelector("input.title");
-    title?.focus({ preventScroll: true });
-    scrollCardIntoView(card);
-  });
+  revealInsertedCard(card);
 }
 
 /** Дублирует кейс или баг и вставляет независимую копию сразу после оригинала. */
@@ -445,7 +477,26 @@ function removeItem(itemType, itemIndex) {
     return;
   }
 
-  animateItemCard(target, "out").then(() => {
+  const previousCard = itemIndex > 0
+    ? pane.querySelector(
+      `.card[data-item-type="${itemType}"][data-item-index="${itemIndex - 1}"]`,
+    )
+    : null;
+  const targetStyles = getComputedStyle(target);
+  const removedBlockSize = target.getBoundingClientRect().height
+    + (Number.parseFloat(targetStyles.marginBottom) || 0);
+  const futureMaxScroll = Math.max(
+    0,
+    document.documentElement.scrollHeight - removedBlockSize - window.innerHeight,
+  );
+  const removalAnimation = animateItemCard(target, "out");
+
+  // Прокрутка и освобождение места — одно составное движение. Если запускать
+  // прокрутку после collapse, пользователь сначала видит сдвиг соседей, а затем
+  // второй отдельный рывок страницы. Для первой карточки прокрутки нет.
+  scrollCardIntoView(previousCard, { maxScroll: futureMaxScroll });
+
+  removalAnimation.then(() => {
     // Find by object reference: another card may have completed its own short
     // removal animation first and shifted numeric indexes in the meantime.
     const currentIndex = list.indexOf(item);
